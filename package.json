@@ -1,7 +1,7 @@
 {
-	"name": "obsidian-fountain-plugin",
+	"name": "obsidian-fountain-plus",
 	"version": "0.34.3",
-	"description": "This is a fountain plugin for obsidian",
+	"description": "Write screenplays in Fountain format inside Obsidian.",
 	"main": "main.js",
 	"scripts": {
 		"predev": "npm run parser",
@@ -17,7 +17,7 @@
 		"format": "biome format --write",
 		"format:check": "biome format",
 		"test:e2e": "wdio run ./wdio.conf.mts",
-		"local-deploy": "mkdir -p test-vault/.obsidian/plugins/fountain && cp manifest.json main.js styles.css test-vault/.obsidian/plugins/fountain"
+		"local-deploy": "mkdir -p test-vault/.obsidian/plugins/fountain-plus && cp manifest.json main.js styles.css test-vault/.obsidian/plugins/fountain-plus"
 	},
 	"keywords": [],
 	"author": "",

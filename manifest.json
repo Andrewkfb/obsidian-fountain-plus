@@ -1,9 +1,9 @@
 {
-	"id": "fountain",
-	"name": "Fountain",
+	"id": "fountain-plus",
+	"name": "Obsidian Fountain Plus",
 	"version": "0.34.3",
 	"minAppVersion": "0.15.0",
-	"description": "Write screenplays in Fountain format with live screenwriting formatting, index cards, PDF export, rehearsal mode, scene numbers, snippets, and margin marks.",
+	"description": "Write screenplays in Fountain format with live screenwriting formatting, index cards, PDF export, Final Draft import/export, script statistics, rehearsal mode, scene numbers, snippets, and margin marks.",
 	"author": "Benedikt Grundmann",
 	"authorUrl": "https://github.com/bgrundmann",
 	"isDesktopOnly": false

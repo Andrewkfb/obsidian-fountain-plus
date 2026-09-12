@@ -1,4 +1,6 @@
-# Fountain — write screenplays in obsidian
+# Obsidian Fountain Plus — write screenplays in Obsidian
+
+A fork of [bgrundmann/obsidian-fountain](https://github.com/bgrundmann/obsidian-fountain) with Final Draft import/export, script statistics, title-page editing, touch support and a parser roughly twice as fast.
 
 A plugin for writing screenplays in [Fountain format](https://fountain.io) inside Obsidian. Live formatting as you type, an editable index-card view, an outline-style sidebar, PDF export, rehearsal mode, snippets — basically the bits I kept wishing for whenever I tried to use Obsidian for actual scripts.
 

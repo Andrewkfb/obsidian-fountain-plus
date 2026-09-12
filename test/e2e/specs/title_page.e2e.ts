@@ -22,7 +22,7 @@ async function writeFile(path: string, contents: string): Promise<void> {
 
 async function runEditTitlePage(): Promise<void> {
   await browser.executeObsidian(({ app }) => {
-    (app as any).commands.executeCommandById("fountain:edit-title-page");
+    (app as any).commands.executeCommandById("fountain-plus:edit-title-page");
   });
   await browser.$(".modal").waitForExist({ timeout: 5_000 });
 }

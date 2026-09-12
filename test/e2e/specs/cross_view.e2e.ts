@@ -275,7 +275,7 @@ describe("Programmatic edits", function () {
         const text = await app.vault.read(file);
         const insertAt = text.length;
         // biome-ignore lint/suspicious/noExplicitAny: cross-process plugin handle
-        const plugin: any = (app as any).plugins.getPlugin("fountain");
+        const plugin: any = (app as any).plugins.getPlugin("fountain-plus");
         await plugin.applyEditsToFountainFile("dialogue.fountain", [
           {
             range: { start: insertAt, end: insertAt },

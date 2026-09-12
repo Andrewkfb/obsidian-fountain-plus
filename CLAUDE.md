@@ -1,4 +1,7 @@
-# Obsidian Fountain Plugin
+# Obsidian Fountain Plus
+
+A fork of `bgrundmann/obsidian-fountain`. Plugin id is `fountain-plus`, so
+command ids are `fountain-plus:…` — the e2e specs depend on that prefix.
 
 ## Features
 

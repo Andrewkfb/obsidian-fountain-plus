@@ -103,20 +103,20 @@ describe("Final Draft interop and statistics", function () {
 
   it("registers every new command", async function () {
     for (const id of [
-      "fountain:export-final-draft",
-      "fountain:import-final-draft",
-      "fountain:script-statistics",
-      "fountain:toggle-edit-mode",
-      "fountain:search-in-script",
-      "fountain:move-selection-to-snippets",
-      "fountain:copy-selection-to-snippets",
+      "fountain-plus:export-final-draft",
+      "fountain-plus:import-final-draft",
+      "fountain-plus:script-statistics",
+      "fountain-plus:toggle-edit-mode",
+      "fountain-plus:search-in-script",
+      "fountain-plus:move-selection-to-snippets",
+      "fountain-plus:copy-selection-to-snippets",
     ]) {
       expect(await commandExists(id)).toBe(true);
     }
   });
 
   it("exports the script as a Final Draft file beside it", async function () {
-    await runCommand("fountain:export-final-draft");
+    await runCommand("fountain-plus:export-final-draft");
     const fdx = await waitForFile("interop.fdx");
 
     expect(fdx).toContain("<FinalDraft");
@@ -131,7 +131,7 @@ describe("Final Draft interop and statistics", function () {
     // An .fdx in the vault is as likely to be a collaborator's file as a
     // previous export, so the exporter picks a fresh name instead.
     await writeFile("interop.fdx", "PRECIOUS ORIGINAL");
-    await runCommand("fountain:export-final-draft");
+    await runCommand("fountain-plus:export-final-draft");
 
     await waitForFile("interop 1.fdx");
     expect(await readFile("interop.fdx")).toBe("PRECIOUS ORIGINAL");
@@ -151,7 +151,7 @@ describe("Final Draft interop and statistics", function () {
 </FinalDraft>`,
     );
 
-    await runCommand("fountain:import-final-draft");
+    await runCommand("fountain-plus:import-final-draft");
     // A FuzzySuggestModal renders as `.prompt`, not `.modal`.
     await browser.$(".prompt").waitForExist({ timeout: 5_000 });
     await browser.$(".suggestion-item").waitForExist({ timeout: 5_000 });
@@ -164,7 +164,7 @@ describe("Final Draft interop and statistics", function () {
   });
 
   it("shows statistics with a real page count", async function () {
-    await runCommand("fountain:script-statistics");
+    await runCommand("fountain-plus:script-statistics");
     await browser.$(".modal").waitForExist({ timeout: 5_000 });
 
     const text = await browser.$(".modal").getText();
@@ -190,7 +190,7 @@ describe("Final Draft interop and statistics", function () {
   });
 
   it("persists PDF defaults chosen in the export dialog", async function () {
-    await runCommand("fountain:generate-pdf");
+    await runCommand("fountain-plus:generate-pdf");
     await browser.$(".modal").waitForExist({ timeout: 5_000 });
 
     // Flip paper size to A4, then confirm.
@@ -213,7 +213,7 @@ describe("Final Draft interop and statistics", function () {
     await browser.waitUntil(
       async () =>
         (await browser.executeObsidian(async ({ app }) => {
-          const plugin = (app as any).plugins.plugins.fountain;
+          const plugin = (app as any).plugins.plugins["fountain-plus"];
           return plugin?.settings?.pdf?.paperSize ?? null;
         })) === "a4",
       { timeout: 5_000, timeoutMsg: "paper size was not persisted" },

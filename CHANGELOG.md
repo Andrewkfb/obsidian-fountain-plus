@@ -1,6 +1,8 @@
 # Changelog
 
-## [0.35.0] - Title Pages, Final Draft Interop, and a Twice-as-Fast Parser
+## [0.35.0] - Obsidian Fountain Plus
+
+- **Renamed**: This is now **Obsidian Fountain Plus**, a fork of [bgrundmann/obsidian-fountain](https://github.com/bgrundmann/obsidian-fountain). The plugin id changed from `fountain` to `fountain-plus` so it has a separate identity from the original — which means **command ids are now `fountain-plus:…`, and anyone moving over from the original plugin will need to re-set their hotkeys and plugin settings**. Note that both plugins claim the `.fountain` extension, so don't run them side by side.
 
 - **Title pages**: A new `Edit title page` command creates or edits the title page from a dialog, with a field per standard Fountain key (Title, Credit, Author, Source, Draft date, Contact). It prefills from the document, writes the keys back in conventional order, and removes the title page entirely when every field is cleared. Fields left blank are omitted rather than written as bare `Key:` lines — a key with no value stops the *whole* block from parsing, which is the trap this command exists to keep you out of. Keys outside the standard set (`Copyright`, `Revision`, …) are preserved untouched and listed in the dialog. Values keep their inline emphasis, so `*Star* Wars` stays italic markup.
 - **Performance**: Parsing is ~2x faster — 30ms → 15ms on a 90-page script, measured on the same document before and after. The editor re-parses the entire document on every keystroke, so this is latency you feel while typing in a feature-length script. The grammar's text fallback matched a single character at a time, allocating one AST node per character which `mergeText` then merged back into runs; a new `PlainTextRun` rule consumes a whole run at once. `FountainScript.structure()` is now memoized, which also halves the scene-folding cost the fold gutter pays on every viewport change.
