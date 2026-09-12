@@ -1,5 +1,6 @@
 import { browser, expect } from "@wdio/globals";
 import { obsidianPage } from "wdio-obsidian-service";
+import { MOD } from "../mod_key";
 
 /** Ensure we're in readonly mode. */
 async function ensureReadonlyMode() {
@@ -11,7 +12,7 @@ async function ensureReadonlyMode() {
     return false;
   });
   if (isEdit) {
-    await browser.keys(["Meta", "e"]);
+    await browser.keys([MOD, "e"]);
     await browser.$(".screenplay").waitForExist({ timeout: 5_000 });
   }
 }
@@ -59,7 +60,7 @@ describe("Dialogue rendering", function () {
 
   describe("editor view", function () {
     it("should apply correct syntax highlighting for dialogue", async function () {
-      await browser.keys(["Meta", "e"]);
+      await browser.keys([MOD, "e"]);
       await browser.$(".cm-editor").waitForExist({ timeout: 5_000 });
 
       // Check that character names get dialogue-character decoration

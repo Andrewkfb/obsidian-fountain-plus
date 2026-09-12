@@ -1,5 +1,6 @@
 import { browser, expect } from "@wdio/globals";
 import { obsidianPage } from "wdio-obsidian-service";
+import { MOD } from "../mod_key";
 
 /** Ensure we're in readonly mode before each test. */
 async function ensureReadonlyMode() {
@@ -11,7 +12,7 @@ async function ensureReadonlyMode() {
     return false;
   });
   if (isEdit) {
-    await browser.keys(["Meta", "e"]);
+    await browser.keys([MOD, "e"]);
     await browser.$(".screenplay").waitForExist({ timeout: 5_000 });
   }
 }
@@ -58,7 +59,7 @@ describe("Programmatic edits", function () {
 
       // Put the active (second) view into edit mode so we exercise both
       // readonly sibling sync and editor originator sync.
-      await browser.keys(["Meta", "e"]);
+      await browser.keys([MOD, "e"]);
       await browser.$(".cm-editor").waitForExist({ timeout: 5_000 });
 
       // Programmatic edit from the active (editor) view: insert text after
@@ -114,7 +115,7 @@ describe("Programmatic edits", function () {
   describe("cursor preservation", function () {
     it("keeps the cursor put when a programmatic edit happens elsewhere", async function () {
       // Enter edit mode on the single leaf.
-      await browser.keys(["Meta", "e"]);
+      await browser.keys([MOD, "e"]);
       await browser.$(".cm-editor").waitForExist({ timeout: 5_000 });
 
       // Place the cursor at a known position near the top (inside "Title:").
@@ -164,7 +165,7 @@ describe("Programmatic edits", function () {
       expect(cursorAfter).toBe(cursorAnchor);
 
       // Undo should remove the programmatic insert in a single step.
-      await browser.keys(["Meta", "z"]);
+      await browser.keys([MOD, "z"]);
       const textAfterUndo = await browser.executeObsidian(({ app }) => {
         const leaf = app.workspace.activeLeaf;
         return (leaf!.view as any).getViewData();
@@ -180,7 +181,7 @@ describe("Programmatic edits", function () {
     // from disk. If the helper ever read from disk while typed-but-not-
     // yet-saved text only existed in CM, that text would be clobbered.
     it("preserves typed-but-unsaved text when a programmatic edit follows", async function () {
-      await browser.keys(["Meta", "e"]);
+      await browser.keys([MOD, "e"]);
       await browser.$(".cm-editor").waitForExist({ timeout: 5_000 });
 
       // Dispatch a CM change directly (simulates the user typing) and then,

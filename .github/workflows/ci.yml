@@ -72,16 +72,28 @@ jobs:
       - name: Build plugin
         run: npm run build
 
+      # `set -o pipefail` is load-bearing: piping into tee otherwise makes
+      # the step's exit status tee's, so a failing suite reports success.
       - name: Run e2e tests
-        run: xvfb-run --auto-servernum npm run test:e2e 2>&1 | tee e2e.log
+        shell: bash
+        run: |
+          set -o pipefail
+          xvfb-run --auto-servernum npm run test:e2e 2>&1 | tee e2e.log
 
       # The failure this guard exists for: the runner can exit 0 having
-      # spawned no workers and run no specs at all — which reads as a pass
-      # in every log and every status check. Assert that specs actually
-      # ran, not merely that nothing failed.
+      # spawned no workers and run no specs at all, which reads as a pass
+      # in every log and every status check. The step above catches a
+      # non-zero exit; this catches a *zero* exit that did nothing, and
+      # re-asserts that no spec failed.
       - name: Fail if no specs ran
+        if: always()
+        shell: bash
         run: |
           if ! grep -qE '^Spec Files:[[:space:]]+[1-9][0-9]* passed' e2e.log; then
             echo "::error::e2e run reported no passing spec files — the suite did not actually run."
+            exit 1
+          fi
+          if grep -qE '^Spec Files:.*[1-9][0-9]* failed' e2e.log; then
+            echo "::error::e2e run reported failing spec files."
             exit 1
           fi

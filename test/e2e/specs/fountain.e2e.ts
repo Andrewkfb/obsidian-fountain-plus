@@ -1,5 +1,6 @@
 import { browser, expect } from "@wdio/globals";
 import { obsidianPage } from "wdio-obsidian-service";
+import { MOD } from "../mod_key";
 
 /** Ensure we're in readonly mode before each test. */
 async function ensureReadonlyMode() {
@@ -11,7 +12,7 @@ async function ensureReadonlyMode() {
     return false;
   });
   if (isEdit) {
-    await browser.keys(["Meta", "e"]);
+    await browser.keys([MOD, "e"]);
     await browser.$(".screenplay").waitForExist({ timeout: 5_000 });
   }
 }
@@ -40,7 +41,7 @@ describe("Fountain plugin", function () {
     });
 
     it("should toggle to edit mode with Mod+E", async function () {
-      await browser.keys(["Meta", "e"]);
+      await browser.keys([MOD, "e"]);
 
       const cmEditor = browser.$(".cm-editor");
       await expect(cmEditor).toBeDisplayed();
@@ -57,11 +58,11 @@ describe("Fountain plugin", function () {
 
     it("should toggle back to readonly mode with Mod+E", async function () {
       // Enter edit mode
-      await browser.keys(["Meta", "e"]);
+      await browser.keys([MOD, "e"]);
       await browser.$(".cm-editor").waitForExist({ timeout: 5_000 });
 
       // Toggle back to readonly
-      await browser.keys(["Meta", "e"]);
+      await browser.keys([MOD, "e"]);
       await browser.$(".screenplay").waitForExist({ timeout: 5_000 });
 
       const isEdit = await browser.executeObsidian(({ app }) => {
@@ -78,7 +79,7 @@ describe("Fountain plugin", function () {
   describe("snippet insertion syncs to editor", function () {
     it("should update CodeMirror when text is inserted via replaceText", async function () {
       // Enter edit mode
-      await browser.keys(["Meta", "e"]);
+      await browser.keys([MOD, "e"]);
       await browser.$(".cm-editor").waitForExist({ timeout: 5_000 });
 
       // Simulate what the sidebar drop handler does: call replaceText

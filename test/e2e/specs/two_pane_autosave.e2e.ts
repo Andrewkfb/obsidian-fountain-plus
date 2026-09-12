@@ -1,5 +1,6 @@
 import { browser, expect } from "@wdio/globals";
 import { obsidianPage } from "wdio-obsidian-service";
+import { MOD } from "../mod_key";
 
 // Reproduces issue #36: with the same file open in two panes (one editor,
 // one readonly/index-cards), typing in the editor gets clobbered when the
@@ -42,7 +43,7 @@ describe("two-pane autosave (issue #36)", function () {
       async () => (await browser.$$(".screenplay")).length === 2,
       { timeout: 5_000, timeoutMsg: "expected two readonly views" },
     );
-    await browser.keys(["Meta", "e"]);
+    await browser.keys([MOD, "e"]);
     await browser.$(".cm-editor").waitForExist({ timeout: 5_000 });
 
     // Deterministic version of the race: TextFileView.save() snapshots

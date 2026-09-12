@@ -1,5 +1,6 @@
 import { browser, expect } from "@wdio/globals";
 import { obsidianPage } from "wdio-obsidian-service";
+import { MOD } from "../mod_key";
 
 /** Read a vault file's current on-disk contents. */
 async function readFile(path: string): Promise<string> {
@@ -54,7 +55,7 @@ async function setField(name: string, value: string): Promise<void> {
 async function clearField(name: string): Promise<void> {
   const input = await fieldInput(name);
   await input.click();
-  await browser.keys(["Meta", "a"]);
+  await browser.keys([MOD, "a"]);
   await browser.keys(["Delete"]);
 }
 
