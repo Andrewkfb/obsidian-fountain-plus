@@ -23,6 +23,17 @@ export class FountainScript {
   readonly script: FountainElement[];
   readonly document: string;
   readonly allCharacters: Set<string>;
+  /** Memoized `structure()` result. A FountainScript is immutable once
+   *  constructed, so the structure derived from it is too. The fold
+   *  service asks for it once per visible line on every viewport
+   *  change, which made recomputation show up while scrolling. */
+  private cachedStructure: ScriptStructure | null = null;
+  /** Memoized `withHiddenElementsRemoved` results, keyed by the settings
+   *  that produced them. The readonly view rebuilds a filtered script on
+   *  every re-render, and a rebuild re-runs dual pairing and the
+   *  character scan over the whole document. There are only eight
+   *  possible keys, so this is bounded by construction. */
+  private cachedFiltered = new Map<string, FountainScript>();
 
   constructor(
     document: string,
@@ -93,6 +104,13 @@ export class FountainScript {
       instead.
   */
   structure(): ScriptStructure {
+    if (this.cachedStructure !== null) return this.cachedStructure;
+    const structure = this.computeStructure();
+    this.cachedStructure = structure;
+    return structure;
+  }
+
+  private computeStructure(): ScriptStructure {
     const [mainElements, snippetElements] = this.splitOffSnippetsSection();
 
     const sections: StructureSection[] = [];
@@ -230,6 +248,19 @@ export class FountainScript {
    * Action blocks that contained only lines that are now completely removed are fully removed.
    */
   withHiddenElementsRemoved(settings: {
+    hideBoneyard?: boolean;
+    hideNotes?: boolean;
+    hideSynopsis?: boolean;
+  }): FountainScript {
+    const key = `${settings.hideBoneyard ?? false}|${settings.hideNotes ?? false}|${settings.hideSynopsis ?? false}`;
+    const cached = this.cachedFiltered.get(key);
+    if (cached !== undefined) return cached;
+    const filtered = this.computeWithHiddenElementsRemoved(settings);
+    this.cachedFiltered.set(key, filtered);
+    return filtered;
+  }
+
+  private computeWithHiddenElementsRemoved(settings: {
     hideBoneyard?: boolean;
     hideNotes?: boolean;
     hideSynopsis?: boolean;

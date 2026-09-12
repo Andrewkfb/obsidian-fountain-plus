@@ -81,14 +81,10 @@ export class ReadonlyViewState implements ViewState {
 
   render() {
     this.contentEl.empty();
+    // `parseFountain` guarantees a FountainScript: a document the
+    // grammar rejects comes back as action lines rather than as an
+    // error, so there is no failure case to handle here.
     const fp = this.callbacks.getScript();
-    if ("error" in fp) {
-      // The parser should not fail but handle bad inputs as action lines
-      // if you managed to construct a script for which that is not true
-      // please report this as a bug.
-      console.error("error parsing script", fp);
-      return;
-    }
     const mainblock = this.contentEl.createDiv(
       this.showMode === ShowMode.IndexCards ? undefined : "screenplay",
     );

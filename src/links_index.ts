@@ -12,9 +12,12 @@ import {
   parseLinkContent,
   targetRefersTo,
 } from "./fountain";
-import { parse } from "./fountain/parser";
+import { parseFountain } from "./fountain/parse_safe";
 
 const FOUNTAIN_EXT = "fountain";
+
+/** Literal opening of a `[[>target]]` link note. See `indexFromText`. */
+const LINK_NOTE_PREFIX = "[[>";
 
 /**
  * In-memory index of `[[>...]]` links across all `.fountain` files.
@@ -108,7 +111,13 @@ export class LinkIndex {
 
   private indexFromText(sourcePath: string, text: string): void {
     this.removeSource(sourcePath);
-    const script = parse(text, {});
+    // A link note is always spelled `[[>` — the grammar allows nothing
+    // between the brackets and the marker — so a file without that
+    // substring cannot contain one. Checking first avoids parsing every
+    // `.fountain` file in the vault on startup and on every create or
+    // delete, when most scripts have no cross-file links at all.
+    if (!text.includes(LINK_NOTE_PREFIX)) return;
+    const script = parseFountain(text);
     const newTargets = new Set<string>();
     for (const note of extractLinks(script.script)) {
       const content = text.slice(note.textRange.start, note.textRange.end);
@@ -186,7 +195,8 @@ export class LinkIndex {
     // old path instead — the index already narrowed us to files that had
     // at least one link resolving to oldTargetPath.
     const text = await this.app.vault.cachedRead(sourceFile);
-    const script = parse(text, {});
+    if (!text.includes(LINK_NOTE_PREFIX)) return;
+    const script = parseFountain(text);
 
     const edits: Edit[] = [];
     for (const note of extractLinks(script.script)) {

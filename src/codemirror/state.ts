@@ -1,6 +1,6 @@
 import { StateEffect, StateField } from "@codemirror/state";
 import type { FountainScript } from "../fountain";
-import { parse } from "../fountain/parser";
+import { parseFountain } from "../fountain/parse_safe";
 
 /**
  * State effect to set the fountain script externally (e.g., when the document
@@ -18,7 +18,7 @@ export const setFountainScript = StateEffect.define<FountainScript>();
  */
 export const fountainScriptField = StateField.define<FountainScript>({
   create(state) {
-    return parse(state.doc.toString(), {});
+    return parseFountain(state.doc.toString());
   },
 
   update(script, tr) {
@@ -31,7 +31,7 @@ export const fountainScriptField = StateField.define<FountainScript>({
 
     // Re-parse on document changes
     if (tr.docChanged) {
-      return parse(tr.newDoc.toString(), {});
+      return parseFountain(tr.newDoc.toString());
     }
 
     return script;

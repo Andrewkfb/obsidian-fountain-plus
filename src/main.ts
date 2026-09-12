@@ -14,9 +14,17 @@ import {
   openSidebarCommand,
 } from "./commands";
 import { applyEditsToFountainFile } from "./edit_pipeline";
+import { exportFdxCommand, importFdxCommand } from "./fdx_commands";
 import type { Edit } from "./fountain";
-import { parse } from "./fountain/parser";
+import { parseFountain } from "./fountain/parse_safe";
 import { LinkIndex } from "./links_index";
+import {
+  type FountainSettings,
+  FountainSettingTab,
+  mergeSettings,
+} from "./settings";
+import { showStatisticsCommand } from "./statistics_command";
+import { editTitlePageCommand } from "./title_page_command";
 import { EditorViewState } from "./views/editor_view_state";
 import { FountainView, VIEW_TYPE_FOUNTAIN } from "./views/fountain_view";
 import { renderContent } from "./views/reading_view";
@@ -27,9 +35,15 @@ import {
 
 export default class FountainPlugin extends Plugin {
   private linkIndex?: LinkIndex;
+  settings: FountainSettings = mergeSettings(undefined);
 
   async onload() {
-    this.registerView(VIEW_TYPE_FOUNTAIN, (leaf) => new FountainView(leaf));
+    await this.loadSettings();
+    this.addSettingTab(new FountainSettingTab(this.app, this));
+    this.registerView(
+      VIEW_TYPE_FOUNTAIN,
+      (leaf) => new FountainView(leaf, () => this.settings),
+    );
     this.registerExtensions(["fountain"], VIEW_TYPE_FOUNTAIN);
     this.registerView(
       VIEW_TYPE_SIDEBAR,
@@ -107,6 +121,14 @@ export default class FountainPlugin extends Plugin {
     this.linkIndex = undefined;
   }
 
+  async loadSettings(): Promise<void> {
+    this.settings = mergeSettings(await this.loadData());
+  }
+
+  async saveSettings(): Promise<void> {
+    await this.saveData(this.settings);
+  }
+
   applyEditsToFountainFile(path: string, edits: Edit[]): Promise<void> {
     return applyEditsToFountainFile(this.app, path, edits);
   }
@@ -125,7 +147,7 @@ export default class FountainPlugin extends Plugin {
       ) {
         const fountainText = codeblock.textContent || "";
         const container = createDiv({ cls: "screenplay" });
-        const script = parse(fountainText, {});
+        const script = parseFountain(fountainText);
         renderContent(container, script, {});
         parent.replaceWith(container);
       }
@@ -146,7 +168,83 @@ export default class FountainPlugin extends Plugin {
     this.addCommand({
       id: "generate-pdf",
       name: "Generate PDF",
-      checkCallback: ifFountainFile(this.app, generatePDFCommand),
+      checkCallback: ifFountainFile(this.app, (app) =>
+        generatePDFCommand(app, this),
+      ),
+    });
+    // These four exist because the matching shortcuts are registered on
+    // `FountainView.scope`, not as commands — deliberately, so Mod+F does
+    // not collide with Obsidian's own "Search current file". The side
+    // effect was that they had no entry in the command palette, so on a
+    // device with no hardware keyboard (an iPad, say) they could not be
+    // reached at all. Commands also make them rebindable.
+    this.addCommand({
+      id: "toggle-edit-mode",
+      name: "Toggle edit mode",
+      checkCallback: ifFountainView(this.app, (fv) => {
+        fv.toggleEditMode();
+        this.app.workspace.requestSaveLayout();
+      }),
+    });
+    this.addCommand({
+      id: "search-in-script",
+      name: "Search and replace in script",
+      checkCallback: (checking) => {
+        const fv = this.app.workspace.getActiveViewOfType(FountainView);
+        // Search lives in the CodeMirror editor, so it only applies in
+        // edit mode. Report unavailable rather than silently no-op.
+        if (fv === null || !fv.isEditMode()) return false;
+        if (!checking) fv.openSearch();
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "move-selection-to-snippets",
+      name: "Move selection to snippets",
+      checkCallback: (checking) => {
+        const fv = this.app.workspace.getActiveViewOfType(FountainView);
+        if (fv === null || !(fv.state instanceof EditorViewState)) return false;
+        if (!checking) fv.saveSelectionAsSnippet(true);
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "copy-selection-to-snippets",
+      name: "Copy selection to snippets",
+      checkCallback: (checking) => {
+        const fv = this.app.workspace.getActiveViewOfType(FountainView);
+        if (fv === null || !(fv.state instanceof EditorViewState)) return false;
+        if (!checking) fv.saveSelectionAsSnippet(false);
+        return true;
+      },
+    });
+    this.addCommand({
+      id: "edit-title-page",
+      name: "Edit title page",
+      checkCallback: ifFountainView(this.app, (fv) =>
+        editTitlePageCommand(this.app, fv),
+      ),
+    });
+    this.addCommand({
+      id: "export-final-draft",
+      name: "Export to Final Draft (.fdx)",
+      checkCallback: ifFountainView(this.app, (fv) => {
+        void exportFdxCommand(this.app, fv);
+      }),
+    });
+    this.addCommand({
+      id: "import-final-draft",
+      name: "Import from Final Draft (.fdx)",
+      callback: () => {
+        importFdxCommand(this.app);
+      },
+    });
+    this.addCommand({
+      id: "script-statistics",
+      name: "Script statistics",
+      checkCallback: ifFountainView(this.app, (fv) =>
+        showStatisticsCommand(this.app, fv, this),
+      ),
     });
     this.addCommand({
       id: "add-scene-numbers",

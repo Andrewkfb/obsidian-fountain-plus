@@ -432,7 +432,6 @@ export class FountainSideBarView extends ItemView {
     if (!ft) return;
 
     const script = ft.getScript();
-    if ("error" in script) return;
 
     // Find the "# Snippets" header position
     let snippetsHeaderEnd: number | null = null;
@@ -472,11 +471,9 @@ export class FountainSideBarView extends ItemView {
     container.createDiv({ cls: "sidebar-container" }, (sidebarDiv) => {
       if (ft) {
         const script = ft.getScript();
-        if (!("error" in script)) {
-          const isEditMode = ft.isEditMode();
-          for (const section of this.sections) {
-            section.render(sidebarDiv, script, isEditMode);
-          }
+        const isEditMode = ft.isEditMode();
+        for (const section of this.sections) {
+          section.render(sidebarDiv, script, isEditMode);
         }
       }
     });

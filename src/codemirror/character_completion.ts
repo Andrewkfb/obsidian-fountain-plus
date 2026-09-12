@@ -10,6 +10,7 @@ import {
   type LinkCompletionCandidate,
   createLinkCompletionSource,
 } from "./link_completion";
+import { createSceneCompletionSource } from "./scene_completion";
 
 /**
  * Pattern to match at least two characters, all uppercase letters or numbers,
@@ -81,8 +82,9 @@ function filterCharacters(characters: string[], searchTerm: string): string[] {
 }
 
 /**
- * Creates the combined autocompletion extension: character names and (when
- * `getLinkCandidates` is provided) `[[>...]]` link targets.
+ * Creates the combined autocompletion extension: character names, scene
+ * headings, and (when `getLinkCandidates` is provided) `[[>...]]` link
+ * targets.
  */
 export function createCharacterCompletion(
   getScript: () => FountainScript,
@@ -90,6 +92,7 @@ export function createCharacterCompletion(
 ): Extension {
   const sources: CompletionSource[] = [
     createCharacterCompletionSource(getScript),
+    createSceneCompletionSource(getScript),
   ];
   if (getLinkCandidates) {
     sources.push(createLinkCompletionSource(getLinkCandidates));

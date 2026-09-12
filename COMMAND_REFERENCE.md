@@ -38,6 +38,48 @@ Exports the current fountain script to a formatted PDF.
 - **Availability**: Only when a `.fountain` file is active
 - **Description**: Opens a dialog with export options including paper size (Letter/A4), scene heading formatting, and file overwrite handling. Generates a PDF in the same directory as your fountain file.
 
+### Edit title page
+Creates or edits the script's title page through a dialog.
+- **Command ID**: `edit-title-page`
+- **Availability**: Only when a fountain view is active
+- **Description**: Opens a dialog with a field per standard Fountain title page key — Title, Credit, Author, Source, Draft date, Contact — prefilled from the document's existing title page, or empty when it has none. Fields left blank are omitted (a key with no value would stop the whole title page from parsing), and clearing every field removes the title page. Any keys outside the standard set (`Copyright`, `Revision`, and so on) are preserved untouched and listed in the dialog; edit those directly in the document. Values keep their inline emphasis, so `*Star* Wars` stays italic markup.
+
+### Script statistics
+Shows page count, scene/section counts and per-character dialogue totals.
+- **Command ID**: `script-statistics`
+- **Availability**: Only when a fountain view is active
+- **Description**: Page count is produced by paginating the script exactly as the PDF export does, rather than estimating from length. Per character it reports speeches, spoken lines and words, busiest first; parentheticals are excluded because nobody says them. A shared cue (`MARY & BOB`) credits both speakers.
+
+### Export to Final Draft (.fdx)
+Writes the current script as a Final Draft file next to it.
+- **Command ID**: `export-final-draft`
+- **Availability**: Only when a fountain view is active
+- **Description**: Never overwrites: if `script.fdx` exists it writes `script 1.fdx`, since an `.fdx` in the vault is as likely to be a collaborator's file as a previous export. Sections, synopses and notes are deliberately omitted — they're your outline and annotations, not script content, and an `.fdx` is what gets sent to someone else.
+
+### Import from Final Draft (.fdx)
+Converts an `.fdx` in the vault into a new `.fountain` file and opens it.
+- **Command ID**: `import-final-draft`
+- **Availability**: Always
+- **Description**: Lists the `.fdx` files already in your vault to pick from (Obsidian gives plugins no picker for arbitrary disk paths, so add the file to the vault first). Headings, cues and transitions that Fountain wouldn't recognise on their own are force-marked (`.`, `@`, `>`) so they survive as the right element type. Final Draft title pages are free-form layout, so only `Key: value` lines are carried across.
+
+### Toggle edit mode
+Switches between the editor and the readonly view.
+- **Command ID**: `toggle-edit-mode`
+- **Availability**: Only when a fountain view is active
+- **Description**: Same as Cmd/Ctrl+E and the header's edit icon. Exists as a command so it can be rebound, and so it is reachable on a device with no hardware keyboard.
+
+### Search and replace in script
+Opens the editor's search panel.
+- **Command ID**: `search-in-script`
+- **Availability**: Only when the fountain editor is active
+- **Description**: Same as Cmd/Ctrl+F. The shortcut is registered on the view rather than as a global hotkey so it doesn't collide with Obsidian's own "Search current file"; this command makes it reachable without a keyboard.
+
+### Move selection to snippets / Copy selection to snippets
+Moves or copies the current editor selection into the `# Snippets` section.
+- **Command IDs**: `move-selection-to-snippets`, `copy-selection-to-snippets`
+- **Availability**: Only when the fountain editor is active
+- **Description**: Same as Cmd/Ctrl+Shift+X and Cmd/Ctrl+Shift+C.
+
 ### Open sidebar
 Opens the fountain sidebar with table of contents and snippets.
 - **Command ID**: `open-sidebar`

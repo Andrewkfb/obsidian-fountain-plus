@@ -70,7 +70,23 @@ StyledTextElement
  = "**" elts:(!"**" @StyledTextElement)+ "**" { return mkBold(range(), mergeText(elts)); }
  / "*" elts:(!"*" @StyledTextElement)+ "*" { return mkItalics(range(), mergeText(elts)); }
  / "_" elts:(!"_" @StyledTextElement)+ "_" { return mkUnderline(range(), mergeText(elts)); }
+ / PlainTextRun { return mkText(range()); }
  / (!"\n" .)  { return mkText(range()); }
+
+// Fast path: consume a whole run of characters that cannot begin any
+// other LineTextElement / StyledTextElement alternative in one match,
+// so ordinary prose costs one AST node per run instead of one per
+// character. The single-character fallback above still handles the
+// excluded characters when their own alternative fails to match (an
+// unpaired `*`, a lone `[`, a `/` that does not open a boneyard).
+//
+// Blanks need the `![/<]` guard: `Boneyard` and `EndOfCenteredLine`
+// both start by consuming the blanks *before* their marker, so those
+// blanks belong to that element's range rather than to the text run.
+// Refusing to swallow them here leaves the original per-character path
+// to make that call, which keeps every range byte-identical.
+PlainTextRun
+ = ( [^\n*_[/< \t]+ / [ \t]+ ![/<] )+
 
 Line
  = elements:LineTextElement+ newline:("\n" / !.)
@@ -226,7 +242,7 @@ MaybeName
  = [^ >\t\n] NameChar* { return text() }
 
 NameChar
- = !TrailingDualMarker !TrailingSpaceBeforeDualMarker [^(\n]
+ = !TrailingDualMarker !TrailingSpaceBeforeDualMarker [^a-z(\n]
 
 // The caret marker forms a dual-dialogue indicator; we don't want to
 // pull it (or the whitespace immediately before it) into the character
@@ -243,7 +259,7 @@ BlankLineOrEndOfInput
  / "\n" !.
  / "\n\n"
 
-RestOfLine = [^\n]+ { return range() }
+RestOfLine = [^\n]* { return range() }
 
 OptionalBlanks
  = [ \t]*

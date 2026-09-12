@@ -369,11 +369,15 @@ function generateTitlePageInstructions(
   const lowerLeftKeys = new Set(["contact"]);
   const lowerRightKeys = new Set(["draft date"]);
 
-  const centeredElements: { key: string; values: StyledText[] }[] = [];
-  const lowerLeftElements: { key: string; values: StyledText[] }[] = [];
-  const lowerRightElements: { key: string; values: StyledText[] }[] = [];
+  const centeredElements: SideElement[] = [];
+  const lowerLeftElements: SideElement[] = [];
+  const lowerRightElements: SideElement[] = [];
 
-  // Categorize title page elements
+  // Categorize title page elements. Anything with no placement rule of
+  // its own (`Copyright`, `Revision`, `Notes`, or a key the writer
+  // invented) joins the lower-left block labelled with its key, rather
+  // than being dropped from the PDF while still showing in the reading
+  // view — which is what used to happen.
   for (const element of fountainScript.titlePage?.keyValues ?? []) {
     const keyLower = element.key.toLowerCase();
     if (centeredKeys.has(keyLower)) {
@@ -382,6 +386,8 @@ function generateTitlePageInstructions(
       lowerLeftElements.push(element);
     } else if (lowerRightKeys.has(keyLower)) {
       lowerRightElements.push(element);
+    } else {
+      lowerLeftElements.push({ ...element, label: `${element.key}: ` });
     }
   }
 
@@ -497,62 +503,133 @@ function generateCenteredTitleElementInstructions(
   return { ...pageState, currentY };
 }
 
+/** A title page side element, plus the label to print in front of it.
+ *  Known keys (`Contact`, `Draft date`) print their value alone, the way
+ *  a title page conventionally reads. Keys the plugin has no placement
+ *  rule for print as `Key: value`, because bare values like "2026" mean
+ *  nothing without the key that introduced them. */
+type SideElement = {
+  key: string;
+  values: StyledText[];
+  label?: string;
+};
+
 /**
- * Generates instructions for lower-left title page elements
+ * Flatten side-block elements into wrapped lines, in document order,
+ * top to bottom.
+ *
+ * These blocks are positioned from the bottom of the page upward, and
+ * emitting lines in reading order while stepping `y` upward printed
+ * multi-line values upside down — a two-line `Contact` came out with its
+ * second line above its first. Collecting the lines first means the
+ * caller can lay them out from the top of the block downward, so what
+ * the writer typed is what prints.
  */
-function generateLowerLeftTitleElementInstructions(
-  instructions: Instruction[],
+function collectSideBlockLines(
+  elements: SideElement[],
   pageState: PageState,
-  elements: { key: string; values: StyledText[] }[],
   fountainScript: FountainScript,
   options: PDFOptions,
-): PageState {
-  // Start from bottom left area
-  let currentY = pageState.margins.bottom;
+): WrappedLine[] {
+  const lines: WrappedLine[] = [];
 
   for (const element of elements) {
+    let isFirstLineOfElement = true;
     for (const styledText of element.values) {
       const segments = extractStyledSegments(
         styledText,
         fountainScript.document,
         options,
       );
-      const wrappedLines = wrapStyledText(
+      const wrapped = wrapStyledText(
         segments,
         pageState.charactersPerLine.titlePageSides,
         false,
       );
-
-      for (const line of wrappedLines) {
-        let x = pageState.margins.left;
-
-        for (const segment of line.segments) {
-          if (segment.text.length > 0) {
-            x = emitText(
-              instructions,
-              { ...pageState, currentY },
-              {
-                data: segment.text,
-                x,
-                bold: segment.bold || false,
-                italic: segment.italic || false,
-                underline: segment.underline || false,
-                color: segment.color || "black",
-                strikethrough: segment.strikethrough || false,
-                backgroundColor: segment.backgroundColor,
-              },
-            );
-          }
+      for (const line of wrapped) {
+        if (isFirstLineOfElement && element.label !== undefined) {
+          lines.push({
+            ...line,
+            segments: [{ text: element.label }, ...line.segments],
+          });
+        } else {
+          lines.push(line);
         }
-
-        currentY += pageState.lineHeight; // Move up from bottom
+        isFirstLineOfElement = false;
       }
     }
-
-    currentY += pageState.lineHeight; // Add spacing between elements
+    // Blank line between elements, matching the previous spacing.
+    lines.push({ segments: [], marginMarks: [] });
   }
 
-  return { ...pageState, currentY };
+  // Drop the trailing separator.
+  if (lines.length > 0) lines.pop();
+  return lines;
+}
+
+/** Emit pre-collected side-block lines from the top of the block
+ *  downward, so `lines[0]` is the topmost. `xFor` decides the starting
+ *  x of each line, which is what distinguishes left from right
+ *  alignment. */
+function emitSideBlock(
+  instructions: Instruction[],
+  pageState: PageState,
+  lines: WrappedLine[],
+  xFor: (line: WrappedLine) => number,
+): PageState {
+  // Bottom line sits on the bottom margin; the block grows upward from
+  // there, so the first line starts that many line-heights higher.
+  const topY = pageState.margins.bottom + (lines.length - 1) * pageState.lineHeight;
+  let currentY = topY;
+
+  for (const line of lines) {
+    let x = xFor(line);
+    for (const segment of line.segments) {
+      if (segment.text.length > 0) {
+        x = emitText(
+          instructions,
+          { ...pageState, currentY },
+          {
+            data: segment.text,
+            x,
+            bold: segment.bold || false,
+            italic: segment.italic || false,
+            underline: segment.underline || false,
+            color: segment.color || "black",
+            strikethrough: segment.strikethrough || false,
+            backgroundColor: segment.backgroundColor,
+          },
+        );
+      }
+    }
+    currentY -= pageState.lineHeight;
+  }
+
+  return { ...pageState, currentY: topY };
+}
+
+/**
+ * Generates instructions for lower-left title page elements
+ */
+function generateLowerLeftTitleElementInstructions(
+  instructions: Instruction[],
+  pageState: PageState,
+  elements: SideElement[],
+  fountainScript: FountainScript,
+  options: PDFOptions,
+): PageState {
+  const lines = collectSideBlockLines(
+    elements,
+    pageState,
+    fountainScript,
+    options,
+  );
+  return emitSideBlock(
+    instructions,
+    pageState,
+    lines,
+    () => pageState.margins.left,
+  );
 }
 
 /**
@@ -561,64 +638,23 @@ function generateLowerLeftTitleElementInstructions(
 function generateLowerRightTitleElementInstructions(
   instructions: Instruction[],
   pageState: PageState,
-  elements: { key: string; values: StyledText[] }[],
+  elements: SideElement[],
   fountainScript: FountainScript,
   options: PDFOptions,
 ): PageState {
-  // Start from bottom right area
-  let currentY = pageState.margins.bottom;
-
-  for (const element of elements) {
-    for (const styledText of element.values) {
-      const segments = extractStyledSegments(
-        styledText,
-        fountainScript.document,
-        options,
-      );
-      const wrappedLines = wrapStyledText(
-        segments,
-        pageState.charactersPerLine.titlePageSides,
-        false,
-      );
-
-      for (const line of wrappedLines) {
-        // Calculate line width for right alignment
-        let lineWidth = 0;
-        for (const segment of line.segments) {
-          lineWidth +=
-            segment.text.length * getCharacterWidth(pageState.fontSize);
-        }
-
-        let x =
-          pageState.pageWidth - pageState.margins.right - lineWidth;
-
-        for (const segment of line.segments) {
-          if (segment.text.length > 0) {
-            x = emitText(
-              instructions,
-              { ...pageState, currentY },
-              {
-                data: segment.text,
-                x,
-                bold: segment.bold || false,
-                italic: segment.italic || false,
-                underline: segment.underline || false,
-                color: segment.color || "black",
-                strikethrough: segment.strikethrough || false,
-                backgroundColor: segment.backgroundColor,
-              },
-            );
-          }
-        }
-
-        currentY += pageState.lineHeight; // Move up from bottom
-      }
+  const lines = collectSideBlockLines(
+    elements,
+    pageState,
+    fountainScript,
+    options,
+  );
+  return emitSideBlock(instructions, pageState, lines, (line) => {
+    let lineWidth = 0;
+    for (const segment of line.segments) {
+      lineWidth += segment.text.length * getCharacterWidth(pageState.fontSize);
     }
-
-    currentY += pageState.lineHeight; // Add spacing between elements
-  }
-
-  return { ...pageState, currentY };
+    return pageState.pageWidth - pageState.margins.right - lineWidth;
+  });
 }
 
 /**

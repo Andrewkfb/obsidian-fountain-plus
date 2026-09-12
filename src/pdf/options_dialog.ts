@@ -9,21 +9,18 @@ export interface PDFOptions {
 }
 
 export class PDFOptionsDialog extends Modal {
-  private options: PDFOptions = {
-    sceneHeadingBold: true,
-    paperSize: "letter",
-    hideNotes: true,
-    hideSynopsis: true,
-    hideMarginMarks: false,
-  };
+  private options: PDFOptions;
 
   constructor(
     app: App,
     private fileExists: boolean,
     private outputPath: string,
+    initial: PDFOptions,
     private onSubmit: (options: PDFOptions) => void,
   ) {
     super(app);
+    // Copy, so cancelling the dialog cannot mutate the stored defaults.
+    this.options = { ...initial };
     this.setTitle("PDF Generation Options");
   }
 

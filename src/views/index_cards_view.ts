@@ -96,6 +96,31 @@ function applyFlipAnimations(oldRects: Map<string, DOMRect[]>): void {
   }
 }
 
+/** Apply a card move and animate it. Shared by the mouse (HTML5
+ *  drag-and-drop) and touch (pointer event) paths so both produce
+ *  exactly the same edit. Returns false when the move is a no-op. */
+function performCardMove(
+  src: DragData,
+  dstPath: string,
+  dstRange: Range,
+  before: boolean,
+  callbacks: ReadonlyViewCallbacks,
+): boolean {
+  // Same-file no-op: dropping a card on itself.
+  if (src.path === dstPath && src.range.start === dstRange.start) return false;
+  const oldRects = captureCardRects();
+  callbacks.moveSceneAcross({
+    srcPath: src.path,
+    srcRange: src.range,
+    dstPath: dstPath,
+    dstPos: before ? dstRange.start : dstRange.end,
+  });
+  callbacks.requestSave();
+  callbacks.reRender();
+  applyFlipAnimations(oldRects);
+  return true;
+}
+
 function dropHandler(
   dropZone: HTMLElement,
   path: string,
@@ -110,21 +135,126 @@ function dropHandler(
   if (!before && !after) return;
   const dragData = getDragData(evt);
   if (!dragData) return;
-  // Same-file no-op: dropping a card on itself.
-  if (dragData.path === path && dragData.range.start === dropZoneRange.start) {
-    return;
-  }
   evt.preventDefault();
-  const oldRects = captureCardRects();
-  callbacks.moveSceneAcross({
-    srcPath: dragData.path,
-    srcRange: dragData.range,
-    dstPath: path,
-    dstPos: before ? dropZoneRange.start : dropZoneRange.end,
+  performCardMove(dragData, path, dropZoneRange, before, callbacks);
+}
+
+/** Mark the drop side on `dropZone` from a pointer x position, using the
+ *  same half-way rule as `dragoverHandler`. */
+function markDropSide(dropZone: HTMLElement, clientX: number): void {
+  const rect = dropZone.getBoundingClientRect();
+  const clampedX = Math.min(Math.max(clientX, rect.left), rect.right);
+  const percentage = ((clampedX - rect.left) / rect.width) * 100;
+  dropZone.classList.toggle("drop-right", percentage >= 50);
+  dropZone.classList.toggle("drop-left", percentage < 50);
+}
+
+/** Read a card's range back out of the DOM. Touch drags resolve their
+ *  drop target by hit-testing rather than from a closure, so the target's
+ *  identity has to be recoverable from the element itself. */
+function cardRange(card: HTMLElement): Range | null {
+  const raw = card.getAttribute("data-range");
+  if (raw === null) return null;
+  const parts = raw.split(",");
+  if (parts.length !== 2) return null;
+  const start = Number.parseInt(parts[0], 10);
+  const end = Number.parseInt(parts[1], 10);
+  if (Number.isNaN(start) || Number.isNaN(end)) return null;
+  return { start, end };
+}
+
+/**
+ * Pointer-based drag fallback, for touch.
+ *
+ * Reordering uses the HTML5 drag-and-drop API, which WebKit does not
+ * deliver from touch input — `dragstart` never fires — so on an iPad the
+ * cards view silently loses drag-reordering altogether. This runs the
+ * same gesture on pointer events and ends in the same `performCardMove`,
+ * reusing the drop-left/drop-right indicator classes so the two paths
+ * look and behave identically.
+ *
+ * Mice keep the native path: it also handles drags that leave the window,
+ * which pointer capture cannot.
+ */
+function installTouchDragHandlers(
+  handle: HTMLElement,
+  card: HTMLElement,
+  path: string,
+  range: Range,
+  callbacks: ReadonlyViewCallbacks,
+): void {
+  let dragging = false;
+
+  const stop = () => {
+    dragging = false;
+    card.classList.remove("dragging");
+    card
+      .closest(".screenplay-index-cards")
+      ?.classList.remove("dragging-active");
+  };
+
+  handle.addEventListener("pointerdown", (evt: PointerEvent) => {
+    if (evt.pointerType === "mouse") return;
+    // Claim the gesture: without capture the pointer stream stops as soon
+    // as the finger leaves the grip.
+    evt.preventDefault();
+    evt.stopPropagation();
+    dragging = true;
+    try {
+      handle.setPointerCapture(evt.pointerId);
+    } catch {
+      // Throws when the pointer id isn't active. The drag still works
+      // without capture as long as the finger stays over the cards, so
+      // this is a degradation rather than a failure.
+    }
+    card.classList.add("dragging");
+    card.closest(".screenplay-index-cards")?.classList.add("dragging-active");
   });
-  callbacks.requestSave();
-  callbacks.reRender();
-  applyFlipAnimations(oldRects);
+
+  handle.addEventListener("pointermove", (evt: PointerEvent) => {
+    if (!dragging) return;
+    evt.preventDefault();
+    clearDropIndicators();
+    // Pointer capture routes the event here, but hit-testing still
+    // reports whatever is actually under the finger.
+    const under = document.elementFromPoint(evt.clientX, evt.clientY);
+    const dropZone =
+      under instanceof Element
+        ? under.closest<HTMLElement>(".screenplay-index-card[data-range]")
+        : null;
+    if (!dropZone || dropZone.classList.contains("dragging")) return;
+    markDropSide(dropZone, evt.clientX);
+  });
+
+  handle.addEventListener("pointerup", (evt: PointerEvent) => {
+    if (!dragging) return;
+    const under = document.elementFromPoint(evt.clientX, evt.clientY);
+    const dropZone =
+      under instanceof Element
+        ? under.closest<HTMLElement>(".screenplay-index-card[data-range]")
+        : null;
+    const before = dropZone?.classList.contains("drop-left") ?? false;
+    const after = dropZone?.classList.contains("drop-right") ?? false;
+    clearDropIndicators();
+    stop();
+    if (!dropZone || (!before && !after)) return;
+    const dstRange = cardRange(dropZone);
+    const dstPath = dropZone.dataset.fountainPath;
+    if (!dstRange || dstPath === undefined) return;
+    performCardMove(
+      { path, range },
+      dstPath,
+      dstRange,
+      before,
+      callbacks,
+    );
+  });
+
+  handle.addEventListener("pointercancel", () => {
+    if (!dragging) return;
+    clearDropIndicators();
+    stop();
+  });
 }
 
 /** Adds drop-left/drop-right classes to indicate where a drop would
@@ -189,6 +319,10 @@ function installDragAndDropHandlers(
   indexCard: HTMLElement,
   range: Range,
 ) {
+  // The mouse path carries the source file in `dataTransfer`; a touch
+  // drag resolves its target by hit-testing, so the path has to live on
+  // the element itself.
+  indexCard.dataset.fountainPath = path;
   indexCard.addEventListener("dragover", (evt: DragEvent) => {
     dragoverHandler(indexCard, range, evt);
   });
@@ -499,6 +633,13 @@ function renderIndexCard(
           },
           (handle) => {
             setIcon(handle, "grip-vertical");
+            installTouchDragHandlers(
+              handle,
+              indexCard,
+              path,
+              scene.range,
+              callbacks,
+            );
             // Clicks on the grip shouldn't navigate; mousedown still
             // initiates drag normally.
             handle.addEventListener("click", (evt: MouseEvent) => {

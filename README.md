@@ -33,6 +33,11 @@ Rehearsal mode blacks out a character's dialogue:
 
 ## Everything else
 
+- **Final Draft interop** — export any script to `.fdx`, or import one a collaborator sent you; export never overwrites an existing `.fdx`
+- **script statistics** — page count (paginated exactly as the PDF export does, not estimated), scene and section counts, and per-character speech/line/word totals
+- **works on touch** — index cards reorder by dragging the grip on a tablet, and the hover-revealed insertion controls stay visible on devices with no pointer
+- **settings** — PDF export defaults and the spell-check default are remembered rather than re-picked every time
+- **title pages** — an *Edit title page* command fills in Title / Credit / Author / Source / Draft date / Contact through a dialog, creating the title page if the script doesn't have one yet and removing it when you clear every field; custom keys you've added by hand are left alone
 - **scene numbers** (`#1#`, `#1A#`, `#I-1-A#`, etc.) displayed in bold on left and right margins, with commands to automatically add or remove scene numbers
 - **content filtering/removal commands** to create filtered script versions (remove character dialogue, scenes/sections, or element types)
 - **dual dialogue** (`^` marker on the second character) renders as two side-by-side columns in the readonly view and PDF; orphan or unpaired carets show in the editor in the theme's error color so you can see when a `^` had no effect

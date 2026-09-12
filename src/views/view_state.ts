@@ -89,8 +89,6 @@ export interface ViewState {
 export function getSnippetsStartPosition(
   script: FountainScript,
 ): number | null {
-  if ("error" in script) return null;
-
   for (const element of script.script) {
     if (element.kind === "section") {
       const sectionText = script.sliceDocument(element.range);

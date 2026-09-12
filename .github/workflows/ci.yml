@@ -1,0 +1,87 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes an in-flight run obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Lint, typecheck, unit tests, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `npm run parser` regenerates parser.js from the grammar. It is a
+      # pre-hook on build/test anyway; running it up front means a grammar
+      # that no longer compiles fails here rather than inside a test log.
+      - name: Generate parser
+        run: npm run parser
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc -noEmit -skipLibCheck
+
+      # Jest exits non-zero when it finds no tests at all, so a suite that
+      # silently stops running is a failure rather than a green tick.
+      - name: Unit tests
+        run: npm test -- --ci
+
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: End-to-end (Obsidian)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Obsidian's installer and the matching Electron chromedriver are a
+      # few hundred MB; without this every run re-downloads them.
+      - name: Cache Obsidian installers
+        uses: actions/cache@v4
+        with:
+          path: .obsidian-cache
+          key: obsidian-cache-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+          restore-keys: obsidian-cache-${{ runner.os }}-
+
+      # The e2e suite launches the real Obsidian, which is an Electron app
+      # and needs a display even when nothing is watching.
+      - name: Build plugin
+        run: npm run build
+
+      - name: Run e2e tests
+        run: xvfb-run --auto-servernum npm run test:e2e 2>&1 | tee e2e.log
+
+      # The failure this guard exists for: the runner can exit 0 having
+      # spawned no workers and run no specs at all — which reads as a pass
+      # in every log and every status check. Assert that specs actually
+      # ran, not merely that nothing failed.
+      - name: Fail if no specs ran
+        run: |
+          if ! grep -qE '^Spec Files:[[:space:]]+[1-9][0-9]* passed' e2e.log; then
+            echo "::error::e2e run reported no passing spec files — the suite did not actually run."
+            exit 1
+          fi

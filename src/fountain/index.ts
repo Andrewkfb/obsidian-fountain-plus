@@ -52,6 +52,8 @@ export {
 
 export { FountainScript } from "./script";
 
+export { parseFountain } from "./parse_safe";
+
 export {
   type Edit,
   applyEdits,
@@ -67,6 +69,17 @@ export {
 } from "./structure_nav";
 
 export { removeElementsFromText } from "./removal";
+
+export {
+  TITLE_PAGE_KEYS,
+  type TitlePageKey,
+  type TitlePageFields,
+  emptyTitlePageFields,
+  titlePageFieldsOf,
+  renderTitlePageBlock,
+  computeTitlePageEdits,
+  titlePageFieldsAreEmpty,
+} from "./title_page";
 
 export {
   LINK_NOTE_KIND,

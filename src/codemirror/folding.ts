@@ -1,7 +1,7 @@
 import { foldService } from "@codemirror/language";
 import type { EditorState } from "@codemirror/state";
 import type { FountainScript, ScriptStructure } from "../fountain";
-import { StructureSection } from "../fountain";
+import type { StructureSection } from "../fountain";
 import { fountainScriptField } from "./state";
 
 /**

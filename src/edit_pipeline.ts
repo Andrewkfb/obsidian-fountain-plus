@@ -1,6 +1,6 @@
 import { type App, TFile } from "obsidian";
 import { type Edit, applyEdits } from "./fountain";
-import { parse } from "./fountain/parser";
+import { parseFountain } from "./fountain/parse_safe";
 import { FountainView } from "./views/fountain_view";
 
 /**
@@ -32,7 +32,7 @@ export async function applyEditsToFountainFile(
       ? views[0].getScript().document
       : await app.vault.read(file);
   const newText = applyEdits(baseText, edits);
-  const newScript = parse(newText, {});
+  const newScript = parseFountain(newText);
 
   for (const view of views) {
     view.receiveProgrammaticEdits(edits, newScript);

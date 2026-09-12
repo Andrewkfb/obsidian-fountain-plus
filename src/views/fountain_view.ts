@@ -24,7 +24,8 @@ import {
   findSceneAtOffset,
   startOfSceneContent,
 } from "../fountain";
-import { parse } from "../fountain/parser";
+import { parseFountain } from "../fountain/parse_safe";
+import type { FountainSettings } from "../settings";
 import { FuzzySelectString } from "../fuzzy_select_string";
 import {
   type EditorCallbacks,
@@ -67,15 +68,19 @@ export class FountainView extends TextFileView {
   private showViewMenuAction: HTMLElement;
   private stopRehearsalModeAction: HTMLElement;
   private cachedScript: FountainScript;
-  private spellCheckEnabled = false;
+  private spellCheckEnabled: boolean;
 
-  constructor(leaf: WorkspaceLeaf) {
+  /** `getSettings` is a getter rather than a settings snapshot so that
+   *  each newly opened view picks up the current defaults, without the
+   *  plugin having to push changes into live views. */
+  constructor(leaf: WorkspaceLeaf, getSettings: () => FountainSettings) {
     super(leaf);
+    this.spellCheckEnabled = getSettings().spellCheckByDefault;
     this.readonlyViewState = {
       mode: ShowMode.Script,
     };
     // Initialize with empty document
-    this.cachedScript = parse("", {});
+    this.cachedScript = parseFountain("");
     this.state = this.createReadonlyState(this.readonlyViewState, "");
     this.toggleEditAction = this.addAction(
       "edit",
@@ -362,14 +367,12 @@ export class FountainView extends TextFileView {
 
   private rehearsalModeClicked(): void {
     const script = this.getScript();
-    if (!("error" in script)) {
-      new FuzzySelectString(
-        this.app,
-        "Whose lines?",
-        Array.from(script.allCharacters.values()),
-        (character) => this.startRehearsalMode(character),
-      ).open();
-    }
+    new FuzzySelectString(
+      this.app,
+      "Whose lines?",
+      Array.from(script.allCharacters.values()),
+      (character) => this.startRehearsalMode(character),
+    ).open();
   }
 
   startEditModeHere(r: Range): void {
@@ -689,7 +692,7 @@ export class FountainView extends TextFileView {
     const sibling = findFountainViewsForPath(this.app, path).find(
       (v) => v.cachedScript.document === data,
     );
-    this.cachedScript = sibling?.cachedScript ?? parse(data, {});
+    this.cachedScript = sibling?.cachedScript ?? parseFountain(data);
     this.state.receiveScript(this.cachedScript);
   }
 
@@ -822,7 +825,7 @@ export class FountainView extends TextFileView {
     if (!(this.state instanceof EditorViewState)) return;
 
     const script = this.getScript();
-    if (!script || "error" in script) return;
+    if (!script) return;
 
     const docText = this.state.getDocText();
 

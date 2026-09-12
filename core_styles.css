@@ -1180,3 +1180,72 @@
 	background-color: var(--interactive-accent) !important;
 	color: var(--text-on-accent) !important;
 }
+
+/* ==========================================================================
+   Touch / coarse-pointer support
+
+   Several index-card affordances are revealed by hovering: the `+` / `#`
+   insertion gutters and the `+ section` bars sit at `opacity: 0` until a
+   pointer is over them. A touch device never produces that hover, so on
+   a tablet or phone those controls are not merely awkward — they are
+   invisible and unreachable, which silently removes scene and section
+   insertion from the cards view.
+
+   `hover: none` matches exactly the devices with that problem, so the
+   desktop experience is untouched. The `.dragging-active` rules that
+   hide the gutters mid-drag carry higher specificity and still win.
+   ========================================================================== */
+@media (hover: none) {
+	.insertion-gutter,
+	.section-insert-bar,
+	.section-tail-zone > .section-insert-bar {
+		opacity: 1;
+	}
+
+	/* Already faintly visible at rest, but there is no hover to bring it
+	   to full strength, so a tap target should not look disabled. */
+	.screenplay-index-card .pencil-button,
+	.screenplay-index-card .drag-handle {
+		opacity: 1;
+		color: var(--text-normal);
+	}
+}
+
+/* The grip owns the drag gesture on touch (see `installTouchDragHandlers`).
+   Without this the browser claims the pointer stream for scrolling as soon
+   as the finger moves, and the drag never gets a `pointermove`. */
+.screenplay-index-card .drag-handle {
+	touch-action: none;
+}
+
+/* Script statistics modal. A right-aligned value column and a plain
+   table, because this is data to scan down rather than controls. */
+.fountain-stat-value {
+	font-variant-numeric: tabular-nums;
+	color: var(--text-normal);
+	font-weight: var(--bold-weight);
+}
+
+.fountain-stats-table {
+	width: 100%;
+	border-collapse: collapse;
+	margin-top: 0.5rem;
+}
+
+.fountain-stats-table th,
+.fountain-stats-table td {
+	text-align: left;
+	padding: 4px 8px;
+	border-bottom: var(--border-width) solid var(--background-modifier-border);
+}
+
+.fountain-stats-table th:not(:first-child),
+.fountain-stats-table td:not(:first-child) {
+	text-align: right;
+	font-variant-numeric: tabular-nums;
+}
+
+.fountain-stats-table th {
+	color: var(--text-muted);
+	font-weight: var(--bold-weight);
+}

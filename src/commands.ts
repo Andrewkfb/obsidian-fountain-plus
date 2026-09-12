@@ -1,8 +1,8 @@
 import { type App, Notice, type TFile } from "obsidian";
 import { type FountainElement, removeElementsFromText } from "./fountain";
-import { parse } from "./fountain/parser";
-import { UnsupportedCharacterError, generatePDF } from "./pdf/generator";
+import { parseFountain } from "./fountain/parse_safe";
 import { type PDFOptions, PDFOptionsDialog } from "./pdf/options_dialog";
+import type { SettingsHost } from "./settings";
 import {
   RemoveDialogueModal,
   RemoveElementTypesModal,
@@ -87,7 +87,10 @@ export async function newDocumentCommand(app: App): Promise<void> {
   await createFile(null);
 }
 
-export async function generatePDFCommand(app: App): Promise<void> {
+export async function generatePDFCommand(
+  app: App,
+  settingsHost: SettingsHost,
+): Promise<void> {
   const activeFile = app.workspace.getActiveFile();
   if (activeFile === null) {
     new Notice("Please open a fountain file to generate a PDF");
@@ -95,14 +98,17 @@ export async function generatePDFCommand(app: App): Promise<void> {
   }
 
   try {
-    const content = await app.vault.read(activeFile);
-    const fountainScript = parse(content, {});
+    // pdf-lib is ~78% of the plugin bundle and its module-level
+    // initialisation used to run on every plugin load, for a feature most
+    // sessions never touch. Importing it here defers that work to the
+    // first PDF export. `options_dialog` stays statically imported — it
+    // is a plain Modal and pulls in none of pdf-lib.
+    const { UnsupportedCharacterError, generatePDF } = await import(
+      "./pdf/generator"
+    );
 
-    if ("error" in fountainScript) {
-      new Notice("Failed to parse fountain file");
-      console.error("Error parsing fountain script:", fountainScript);
-      return;
-    }
+    const content = await app.vault.read(activeFile);
+    const fountainScript = parseFountain(content);
 
     const outputPath = activeFile.path.replace(/\.fountain$/, ".pdf");
     const existingFile = app.vault.getAbstractFileByPath(outputPath);
@@ -112,7 +118,11 @@ export async function generatePDFCommand(app: App): Promise<void> {
       app,
       fileExists,
       outputPath,
+      settingsHost.settings.pdf,
       async (options: PDFOptions) => {
+        // Remember what was chosen, so the next export opens the same way.
+        settingsHost.settings.pdf = { ...options };
+        void settingsHost.saveSettings();
         try {
           new Notice("Generating PDF...");
           const pdfDoc = await generatePDF(fountainScript, options);
@@ -154,10 +164,6 @@ export function executeRemovalCommand(
   modalType: "dialogue" | "structure" | "types",
 ): void {
   const script = fountainView.getScript();
-  if ("error" in script) {
-    new Notice("Unable to parse fountain script");
-    return;
-  }
 
   const onConfirm = async (
     elementsToRemove: FountainElement[],
