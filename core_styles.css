@@ -31,13 +31,151 @@
 	word-break: normal;
 }
 
-/* TOC uses UI font for better readability in sidebar */
+/* Outline sidebar: same layout as Foundry Writer's manuscript panel.
+   UI font for readability; scene headings stay uppercase as written. */
 .screenplay-toc {
 	font-family: var(--font-interface);
 	font-size: var(--font-ui-small);
 	line-height: 1.4;
 	max-width: none;
-	padding: 4px;
+	padding: 20px 14px;
+}
+
+.screenplay-toc .toc-eyebrow {
+	color: var(--text-muted);
+	font-size: 10px;
+	letter-spacing: 0.14em;
+	font-weight: 600;
+}
+
+.screenplay-toc .toc-title {
+	font-family: var(--font-interface);
+	font-size: 20px;
+	font-weight: 650;
+	text-transform: none;
+	margin: 7px 0 4px;
+}
+
+.screenplay-toc .toc-muted,
+.screenplay-toc.toc-empty,
+.screenplay-toc .toc-empty {
+	font-size: var(--font-ui-small);
+	color: var(--text-muted);
+}
+
+.screenplay-toc .toc-empty {
+	padding: 10px 0;
+	line-height: 1.5;
+}
+
+.screenplay-toc .toc-controls {
+	display: flex;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 6px;
+	margin: 18px 0 20px;
+	padding-top: 14px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.screenplay-toc .toc-controls button {
+	font-size: 12px;
+}
+
+.screenplay-toc > section {
+	margin: 0 0 18px;
+}
+
+/* Sections are flat with a depth (1-3); indent deeper ones. */
+.screenplay-toc > section.toc-depth-2 {
+	margin-left: 12px;
+}
+
+.screenplay-toc > section.toc-depth-3 {
+	margin-left: 24px;
+}
+
+.screenplay-toc .toc-section-heading {
+	display: flex;
+	align-items: center;
+	border-bottom: 1px solid var(--background-modifier-border);
+	padding: 4px 0;
+	margin-bottom: 8px;
+}
+
+.screenplay-toc .toc-section-heading .section {
+	flex: 1;
+	font-family: var(--font-interface);
+	font-size: 14px;
+	font-weight: 600;
+	text-transform: none;
+	color: var(--text-normal);
+	margin: 6px 0;
+	cursor: pointer;
+}
+
+.screenplay-toc .toc-section-heading .section:hover {
+	color: var(--interactive-accent);
+}
+
+.screenplay-toc .toc-scene {
+	border-radius: 5px;
+	border-left: 2px solid var(--background-modifier-border);
+	padding: 3px 2px 3px 10px;
+	margin: 2px 0;
+}
+
+.screenplay-toc .toc-scene:hover {
+	background: var(--background-modifier-hover);
+}
+
+.screenplay-toc .scene-heading {
+	font-family: var(--font-interface);
+	font-size: 13px;
+	font-weight: normal;
+	line-height: 1.35;
+	text-align: left;
+	color: var(--text-normal);
+	margin: 0;
+	padding: 4px 0;
+	cursor: pointer;
+}
+
+.screenplay-toc .scene-heading:hover {
+	color: var(--interactive-accent);
+}
+
+.screenplay-toc .synopsis,
+.screenplay-toc .preview {
+	font-size: 12px;
+	line-height: 1.5;
+	color: var(--text-muted);
+	margin: 0 0 4px;
+	overflow-wrap: anywhere;
+}
+
+/* Synopsis spans carry the space after "="; normal wrapping collapses it. */
+.screenplay-toc .synopsis {
+	cursor: pointer;
+}
+
+.screenplay-toc .synopsis:hover {
+	color: var(--text-normal);
+}
+
+.screenplay-toc .preview {
+	color: var(--text-faint);
+}
+
+.screenplay-toc .todo {
+	font-size: 12px;
+	margin: 0 0 4px;
+	cursor: pointer;
+}
+
+/* Section-level synopsis sits under the heading, outside any scene row. */
+.screenplay-toc > section > .synopsis {
+	margin-bottom: 8px;
 }
 
 .screenplay-snippets .snippet {
@@ -256,27 +394,8 @@
 	margin: 0;
 }
 
-.screenplay-toc .scene-heading {
-	text-transform: uppercase;
-	font-weight: var(--bold-weight);
-	font-size: var(--font-ui-small);
-	text-align: left;
-	color: var(--text-normal);
-	margin: 0;
-	margin-top: 4px;
-	padding: 2px 4px;
-	border-radius: 3px;
-	cursor: pointer;
-}
 
-.screenplay-toc .scene-heading:hover {
-	background-color: var(--background-modifier-hover);
-}
 
-/* First scene heading after a section doesn't need extra top margin */
-.screenplay-toc .section + .scene-heading {
-	margin-top: 2px;
-}
 
 .screenplay .scene-number-left {
 	font-weight: bold;
@@ -312,17 +431,6 @@
 	margin: 0;
 }
 
-.screenplay-toc h1,
-.screenplay-toc h2,
-.screenplay-toc h3,
-.screenplay-toc h4,
-.screenplay-toc h5 {
-	font-size: var(--font-ui-small);
-	text-align: left;
-	text-transform: uppercase;
-	font-weight: var(--bold-weight);
-	margin: 0;
-}
 
 /********* sections */
 
@@ -332,30 +440,8 @@
 	text-align: left;
 }
 
-.screenplay-toc .section {
-	text-transform: uppercase;
-	font-weight: var(--bold-weight);
-	text-align: left;
-	font-size: var(--font-ui-small);
-	color: var(--text-normal);
-	margin-top: 8px;
-	padding: 2px 4px;
-	border-radius: 3px;
-	cursor: pointer;
-}
 
-.screenplay-toc .section:hover {
-	background-color: var(--background-modifier-hover);
-}
 
-/* Indent scenes and nested content when inside a section that has a heading */
-.screenplay-toc section:has(> .section) > .scene-heading,
-.screenplay-toc section:has(> .section) > .synopsis,
-.screenplay-toc section:has(> .section) > .preview,
-.screenplay-toc section:has(> .section) > .todo,
-.screenplay-toc section:has(> .section) > section {
-	margin-left: 12px;
-}
 
 /********* synopsis and notes */
 
@@ -371,29 +457,8 @@
 	font-style: italic;
 }
 
-.screenplay-toc .synopsis {
-	color: var(--text-muted);
-	font-style: italic;
-	font-size: var(--font-ui-smaller);
-	margin-left: 8px;
-	padding: 2px 4px;
-	cursor: pointer;
-	border-radius: 3px;
-}
 
-.screenplay-toc .synopsis:hover {
-	background-color: var(--background-modifier-hover);
-}
 
-.screenplay-toc .preview {
-	color: var(--text-faint);
-	font-family:
-		var(--screenplay-font), "Courier Final Draft", "Courier",
-		var(--font-monospace);
-	font-size: var(--font-ui-smaller);
-	margin-left: 8px;
-	padding: 2px 4px;
-}
 
 .screenplay .boneyard {
 	color: var(--text-faint);
@@ -452,26 +517,8 @@
 	);
 }
 
-.screenplay-toc .todo {
-	font-size: var(--font-ui-smaller);
-	margin-left: 16px;
-	padding: 2px 4px;
-	border-radius: 3px;
-	cursor: pointer;
-}
 
-.screenplay-toc .todo:hover {
-	background-color: var(--background-modifier-hover);
-}
 
-.screenplay-toc .toc-controls {
-	display: flex;
-	flex-direction: row;
-	flex-wrap: nowrap;
-	align-items: center;
-	padding: 4px;
-	gap: 4px;
-}
 
 .screenplay .note {
 	color: var(--text-muted);

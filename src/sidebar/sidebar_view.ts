@@ -1,4 +1,10 @@
-import { ItemView, TFile, type WorkspaceLeaf, debounce } from "obsidian";
+import {
+  ItemView,
+  TFile,
+  type ViewStateResult,
+  type WorkspaceLeaf,
+  debounce,
+} from "obsidian";
 import { findFountainViewsForPath } from "../edit_pipeline";
 import {
   type FountainScript,
@@ -9,6 +15,7 @@ import {
   dataRange,
   extractNotes,
 } from "../fountain";
+import { titlePageFieldsOf } from "../fountain/title_page";
 import { FountainView } from "../views/fountain_view";
 import { renderElement } from "../views/reading_view";
 import { getScenePreview } from "../views/render_tools";
@@ -175,9 +182,36 @@ class SnippetsSection extends SidebarSection {
   }
 }
 
+/** Display options for the outline, kept in the sidebar's view state so
+ *  they survive reloads. */
+export interface TocOptions {
+  showTodos: boolean;
+  showSynopsis: boolean;
+}
+
+/** Title-page Title with Fountain emphasis markers removed, else the
+ *  file's basename. */
+function scriptTitle(script: FountainScript, fallback: string): string {
+  const title = titlePageFieldsOf(script)
+    .known.Title.replace(/[*_]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return title || fallback;
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? "" : "s"}`;
+}
+
 class TocSection extends SidebarSection {
-  private showTodos = true;
-  private showSynopsis = false;
+  constructor(
+    callbacks: SidebarCallbacks,
+    private options: TocOptions,
+    private onOptionsChange: () => void,
+    private fileName: () => string,
+  ) {
+    super(callbacks);
+  }
 
   render(
     container: HTMLElement,
@@ -185,71 +219,61 @@ class TocSection extends SidebarSection {
     _isEditMode: boolean,
   ): void {
     container.createDiv({ cls: "toc-section" }, (sectionDiv) => {
-      sectionDiv.createDiv({ cls: "screenplay-toc" }, (div) => {
-        div.createDiv({ cls: "toc-controls" }, (tocControls) => {
-          tocControls.createEl(
-            "input",
-            {
-              type: "checkbox",
-              attr: {
-                name: "todos",
-                ...(this.showTodos ? { checked: "" } : {}),
-              },
-            },
-            (checkbox) => {
-              checkbox.addEventListener("change", (event: Event) => {
-                this.showTodos = checkbox.checked;
-                for (const el of container.querySelectorAll<HTMLElement>(
-                  ".todo",
-                )) {
-                  el.toggle(this.showTodos);
-                }
-              });
-            },
-          );
-          tocControls.createEl("label", {
-            attr: { for: "todos" },
-            text: "todos?",
-          });
-          tocControls.createEl(
-            "input",
-            {
-              type: "checkbox",
-              attr: {
-                name: "synopsis",
-                ...(this.showSynopsis ? { checked: "" } : {}),
-              },
-            },
-            (checkbox) => {
-              checkbox.addEventListener("change", (event: Event) => {
-                this.showSynopsis = checkbox.checked;
-                for (const el of container.querySelectorAll<HTMLElement>(
-                  ".synopsis, .preview",
-                )) {
-                  el.toggle(this.showSynopsis);
-                }
-              });
-            },
-          );
-          tocControls.createEl("label", {
-            attr: { for: "synopsis" },
-            text: "synopsis?",
-          });
-        });
+      sectionDiv.createDiv({ cls: "screenplay-toc" }, (div) =>
+        this.renderOutline(div, script),
+      );
+    });
+  }
 
-        for (const section of script.structure().sections) {
-          this.renderTocSection(div, script, section);
-        }
+  private renderOutline(div: HTMLElement, script: FountainScript) {
+    const sections = script.structure().sections;
+    const sceneCount = sections.reduce(
+      (n, s) => n + s.content.filter((el) => el.scene).length,
+      0,
+    );
+    const sectionCount = sections.filter((s) => s.section).length;
 
-        if (!this.showSynopsis) {
-          for (const el of div.querySelectorAll<HTMLElement>(
-            ".synopsis, .preview",
-          )) {
-            el.hide();
-          }
-        }
+    div.createDiv({ cls: "toc-header" }, (header) => {
+      header.createDiv({ cls: "toc-eyebrow", text: "OUTLINE" });
+      header.createEl("h2", {
+        cls: "toc-title",
+        text: scriptTitle(script, this.fileName()),
+      });
+      header.createDiv({
+        cls: "toc-muted",
+        text: `${plural(sceneCount, "scene")} · ${plural(sectionCount, "section")}`,
       });
     });
+
+    div.createDiv({ cls: "toc-controls" }, (controls) => {
+      const toggle = (label: string, key: keyof TocOptions) => {
+        const b = controls.createEl("button", { text: label });
+        b.type = "button";
+        b.addEventListener("click", () => {
+          this.options[key] = !this.options[key];
+          this.onOptionsChange();
+          div.empty();
+          this.renderOutline(div, script);
+        });
+      };
+      toggle(
+        this.options.showSynopsis ? "Hide synopses" : "Show synopses",
+        "showSynopsis",
+      );
+      toggle(this.options.showTodos ? "Hide todos" : "Show todos", "showTodos");
+    });
+
+    if (sceneCount === 0 && sectionCount === 0) {
+      div.createDiv({
+        cls: "toc-empty",
+        text: "Add a scene heading or a # section to build the outline.",
+      });
+      return;
+    }
+
+    for (const section of sections) {
+      this.renderTocSection(div, script, section);
+    }
   }
 
   private renderSynopsis(
@@ -257,7 +281,7 @@ class TocSection extends SidebarSection {
     script: FountainScript,
     synopsis?: Synopsis,
   ) {
-    if (synopsis) {
+    if (synopsis && this.options.showSynopsis) {
       for (const line of synopsis.lines) {
         const d = s.createDiv({
           cls: "synopsis",
@@ -276,57 +300,52 @@ class TocSection extends SidebarSection {
     script: FountainScript,
     section: StructureSection,
   ) {
-    parent.createEl("section", {}, (s) => {
+    const depth = section.section?.depth ?? 1;
+    parent.createEl("section", { cls: `toc-depth-${depth}` }, (s) => {
       if (section.section) {
         const sect = section.section;
-        const d = s.createEl("h1", {
-          cls: "section",
-          text: script.sliceDocument(sect.range),
-        });
-        d.addEventListener("click", (evt: Event) => {
-          this.callbacks.scrollToRange(sect.range);
+        s.createDiv({ cls: "toc-section-heading" }, (row) => {
+          const d = row.createEl("h3", {
+            cls: "section",
+            // The range includes the leading #s; show only the title.
+            text: script.sliceDocument(sect.range).slice(sect.depth).trim(),
+          });
+          d.addEventListener("click", () => {
+            this.callbacks.scrollToRange(sect.range);
+          });
         });
       }
       this.renderSynopsis(s, script, section.synopsis);
       for (const el of section.content) {
+        const row = el.scene ? s.createDiv({ cls: "toc-scene" }) : s;
         if (el.scene) {
           const el_scene = el.scene;
-          const d = s.createDiv({
+          const d = row.createDiv({
             cls: "scene-heading",
             text: el_scene.heading,
           });
-          d.addEventListener("click", (evt: Event) => {
+          d.addEventListener("click", () => {
             this.callbacks.scrollToRange(el_scene.range);
           });
         }
         if (el.synopsis) {
-          this.renderSynopsis(s, script, el.synopsis);
-        } else {
+          this.renderSynopsis(row, script, el.synopsis);
+        } else if (this.options.showSynopsis) {
           const preview = getScenePreview(script, el);
-          if (preview) {
-            const d = s.createDiv({
-              cls: "preview",
-              text: preview,
-            });
-            if (!this.showSynopsis) {
-              d.hide();
-            }
-          }
+          if (preview) row.createDiv({ cls: "preview", text: preview });
         }
+        if (!this.options.showTodos) continue;
         // Use `.body` not `.content` so the qualifying synopsis (already
         // rendered above) doesn't have its todos surface again here.
         const todos = extractNotes(el.body).filter(
           (n) => n.noteKind === "todo",
         );
         for (const note of todos) {
-          s.createDiv({ cls: "todo" }, (div) => {
+          row.createDiv({ cls: "todo" }, (div) => {
             styledTextToHtml(script, div, [note], {}, false);
             div.addEventListener("click", () =>
               this.callbacks.scrollToRange(note.range),
             );
-            if (!this.showTodos) {
-              div.hide();
-            }
           });
         }
       }
@@ -341,6 +360,7 @@ class TocSection extends SidebarSection {
 export class FountainSideBarView extends ItemView {
   private updateToc: () => void;
   private sections: SidebarSection[];
+  private options: TocOptions = { showTodos: true, showSynopsis: false };
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -355,7 +375,15 @@ export class FountainSideBarView extends ItemView {
         this.insertAfterSnippetsHeader(text),
     };
 
-    this.sections = [new TocSection(callbacks), new SnippetsSection(callbacks)];
+    this.sections = [
+      new TocSection(
+        callbacks,
+        this.options,
+        () => this.app.workspace.requestSaveLayout(),
+        () => this.theFountainView()?.file?.basename ?? "Untitled",
+      ),
+      new SnippetsSection(callbacks),
+    ];
   }
 
   /** Read a slice of text from `path`, preferring an open FountainView's
@@ -385,6 +413,22 @@ export class FountainSideBarView extends ItemView {
 
   getIcon(): string {
     return "list-tree";
+  }
+
+  getState(): Record<string, unknown> {
+    return { ...super.getState(), ...this.options };
+  }
+
+  async setState(
+    state: Partial<TocOptions>,
+    result: ViewStateResult,
+  ): Promise<void> {
+    if (typeof state?.showTodos === "boolean")
+      this.options.showTodos = state.showTodos;
+    if (typeof state?.showSynopsis === "boolean")
+      this.options.showSynopsis = state.showSynopsis;
+    await super.setState(state, result);
+    this.updateToc();
   }
 
   async onload(): Promise<void> {
@@ -475,6 +519,11 @@ export class FountainSideBarView extends ItemView {
         for (const section of this.sections) {
           section.render(sidebarDiv, script, isEditMode);
         }
+      } else {
+        sidebarDiv.createDiv({
+          cls: "screenplay-toc toc-empty",
+          text: "Open a Fountain script to see its outline.",
+        });
       }
     });
   }

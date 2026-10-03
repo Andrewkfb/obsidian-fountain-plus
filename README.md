@@ -138,12 +138,14 @@ The TOC sidebar is where the planning side of the plugin lives. Open it on the r
 
 Click any of them to jump to that location in the script.
 
-### Toggles
+### Layout and toggles
 
-At the top of the sidebar:
+The top of the sidebar shows the script's title (from the title page, else the file name) and a count of scenes and sections. Sections appear as headings and scenes as rows beneath them; `##` and `###` sections are indented.
 
-- **todos?** — show or hide per-scene todos. On by default.
-- **preview?** — show or hide synopsis lines and auto-previews. Off by default, so the outline starts as a plain scene list — turn it on when you want detail.
+- **Show/Hide synopses**: show synopsis lines and auto-previews under each scene. Off by default, so the outline starts as a plain scene list.
+- **Show/Hide todos**: show per-scene todos. On by default.
+
+Both choices are remembered with the workspace layout.
 
 ## Using Margin Marks
 
