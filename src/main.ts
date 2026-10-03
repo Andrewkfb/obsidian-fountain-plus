@@ -19,6 +19,10 @@ import type { Edit } from "./fountain";
 import { parseFountain } from "./fountain/parse_safe";
 import { LinkIndex } from "./links_index";
 import {
+  hideFountainExtensionInLinks,
+  hideFountainExtensionInLivePreview,
+} from "./markdown_link_display";
+import {
   type FountainSettings,
   FountainSettingTab,
   mergeSettings,
@@ -57,6 +61,8 @@ export default class FountainPlugin extends Plugin {
       this.installFountainMdAutoRename();
     });
     this.registerMarkdownPostProcessor(this.markdownPostProcessor);
+    this.registerMarkdownPostProcessor(hideFountainExtensionInLinks);
+    this.registerEditorExtension(hideFountainExtensionInLivePreview);
   }
 
   /**

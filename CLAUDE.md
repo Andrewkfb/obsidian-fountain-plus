@@ -11,6 +11,7 @@ command ids are `fountain-plus:…` — the e2e specs depend on that prefix.
 - **Editor**: Scene folding (Ctrl+Shift+[ ]), character name completion, ⌘⇧L selects the current scene as text (compose with ⌘X / ⌘C for delete / duplicate)
 - **Margin Marks**: `[[@marker]]` syntax renders in margin
 - **Links**: `[[>target]]` / `[[>target|display]]` link to other vault files; auto-rewritten on rename. See `design/links.md` for rationale and deferred features.
+- **Markdown link display**: `[[foo.fountain]]` in a markdown note shows as `foo` — a post-processor for Reading view, a CM6 `ViewPlugin` with `Decoration.replace` for Live Preview (source comes back while the selection touches the link). Display only; link sources keep the extension so they still resolve. Pure helpers in `link_display.ts`, Obsidian wiring in `markdown_link_display.ts`.
 - **Title Page**: `Edit title page` command creates/edits the `Key: value` block via a modal. Pure read/render/diff helpers in `fountain/title_page.ts`, modal in `title_page_command.ts`. Four parser traps it exists to respect: an empty value kills the *whole* block, the trailing blank line is mandatory, it must be first in the file, and multi-line values need 3-space indents. Unknown keys round-trip untouched.
 - **Boneyard**: Content after `# boneyard` hidden when enabled
 - **Removal Commands**: Filter by character, scenes, or element types (creates copy by default)
@@ -149,6 +150,7 @@ In `src/`:
 - **`commands.ts`** — command implementations + `ifFountainFile` / `ifFountainView` checkCallback helpers.
 - **`edit_pipeline.ts`** — path-keyed `applyEditsToFountainFile` (the canonical entry point for programmatic mutations) and `findFountainViewsForPath`.
 - **`links_index.ts`** — `LinkIndex` for `[[>...]]` cross-file links: `targetPath → Set<sourceFile>` lookup, vault listeners, and rename rewriting through `applyEditsToFountainFile`.
+- **`link_display.ts`** / **`markdown_link_display.ts`** — hide `.fountain` in markdown wikilink text (pure helpers / Reading-view post-processor + Live Preview extension).
 - **`removal_commands.ts`** — removal-command modals (UI only). The pure text-removal helper lives in `fountain/removal.ts`.
 - **`title_page_command.ts`** — title page modal (UI only). The pure helpers live in `fountain/title_page.ts`.
 - **`settings.ts`** — `FountainSettings`, defaults, and the settings tab.
