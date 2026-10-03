@@ -44,8 +44,8 @@ function newlinesNeededBefore(doc: string, pos: number): string {
 }
 
 /**
- * Edits to move the scene-sized `range` so its content starts at `newPos`.
- * `newPos` must not lie inside `range`.
+ * Edits to move a scene- or section-sized `range` so its content starts at
+ * `newPos`. `newPos` must not lie inside `range`.
  */
 export function computeMoveSceneEdits(
   script: FountainScript,

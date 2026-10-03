@@ -64,7 +64,12 @@ export {
 
 export {
   findSceneAtOffset,
-  isNoOpSceneMove,
+  isNoOpMove,
+  type OutlineRef,
+  resolveOutlineRef,
+  sectionTitle,
+  sectionBlockRange,
+  sectionMoveTargets,
   sceneMoveTargets,
   sectionDropPosition,
 } from "./structure_nav";

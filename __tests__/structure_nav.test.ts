@@ -3,7 +3,10 @@ import {
   applyEdits,
   computeMoveSceneEdits,
   findSceneAtOffset,
-  isNoOpSceneMove,
+  isNoOpMove,
+  resolveOutlineRef,
+  sectionBlockRange,
+  sectionMoveTargets,
   sceneMoveTargets,
   sectionDropPosition,
 } from "../src/fountain";
@@ -128,10 +131,95 @@ describe("sectionDropPosition", () => {
   });
 });
 
-describe("isNoOpSceneMove", () => {
+describe("isNoOpMove", () => {
   test("positions at either edge of the scene are no-ops", () => {
-    expect(isNoOpSceneMove({ start: 10, end: 20 }, 10)).toBe(true);
-    expect(isNoOpSceneMove({ start: 10, end: 20 }, 20)).toBe(true);
-    expect(isNoOpSceneMove({ start: 10, end: 20 }, 21)).toBe(false);
+    expect(isNoOpMove({ start: 10, end: 20 }, 10)).toBe(true);
+    expect(isNoOpMove({ start: 10, end: 20 }, 20)).toBe(true);
+    expect(isNoOpMove({ start: 10, end: 20 }, 21)).toBe(false);
   });
 });
+
+const NESTED =
+  "Title: T\n\n" +
+  "# Act I\n\nINT. A - DAY\n\nA.\n\n## Chase\n\nEXT. B - DAY\n\nB.\n\n" +
+  "# Act II\n\nINT. C - DAY\n\nC.\n\n" +
+  "# Act III\n\nINT. D - DAY\n\nD.\n";
+
+function moveSection(doc: string, title: string, pos: (s: ReturnType<typeof parse>, start: number) => number | null): string {
+  const script = parse(doc, {});
+  const start = doc.indexOf(title);
+  const block = sectionBlockRange(script, start);
+  if (!block) throw new Error("no block");
+  const p = pos(script, start);
+  if (p === null) throw new Error("no target");
+  return applyEdits(doc, computeMoveSceneEdits(script, block, p));
+}
+
+describe("sectionBlockRange", () => {
+  test("a section's block includes its scenes and deeper subsections", () => {
+    const script = parse(NESTED, {});
+    const block = sectionBlockRange(script, NESTED.indexOf("# Act I"));
+    expect(NESTED.slice(block?.start, block?.end)).toBe(
+      "# Act I\n\nINT. A - DAY\n\nA.\n\n## Chase\n\nEXT. B - DAY\n\nB.\n\n",
+    );
+  });
+
+  test("returns null when no heading starts there", () => {
+    expect(sectionBlockRange(parse(NESTED, {}), 0)).toBeNull();
+  });
+});
+
+describe("sectionMoveTargets", () => {
+  test("moving down swaps with the next sibling, taking subsections along", () => {
+    const doc = moveSection(NESTED, "# Act I", (s, st) => sectionMoveTargets(s, st).down);
+    expect(outline(doc)).toEqual([
+      "# Act II: INT. C - DAY",
+      "# Act I: INT. A - DAY",
+      "## Chase: EXT. B - DAY",
+      "# Act III: INT. D - DAY",
+    ]);
+    expect(doc.startsWith("Title: T\n\n# Act II")).toBe(true);
+  });
+
+  test("moving up swaps with the previous sibling", () => {
+    const doc = moveSection(NESTED, "# Act III", (s, st) => sectionMoveTargets(s, st).up);
+    expect(doc.indexOf("# Act III")).toBeLessThan(doc.indexOf("# Act II\n"));
+    expect(doc.indexOf("# Act I\n")).toBeLessThan(doc.indexOf("# Act III"));
+  });
+
+  test("a subsection only moves among siblings inside its parent", () => {
+    const script = parse(NESTED, {});
+    expect(sectionMoveTargets(script, NESTED.indexOf("## Chase"))).toEqual({ up: null, down: null });
+  });
+
+  test("the first and last sections have nowhere further to go", () => {
+    const script = parse(NESTED, {});
+    expect(sectionMoveTargets(script, NESTED.indexOf("# Act I")).up).toBeNull();
+    expect(sectionMoveTargets(script, NESTED.indexOf("# Act III")).down).toBeNull();
+  });
+});
+
+describe("resolveOutlineRef", () => {
+  test("finds the scene in an edited script, where old offsets would be wrong", () => {
+    const edited = ACTS.replace("A.\n", "A. Plus a sentence typed after the outline drew.\n");
+    const script = parse(edited, {});
+    const resolved = resolveOutlineRef(script, { kind: "scene", index: 1, label: "INT. B - DAY" });
+    expect(edited.slice(resolved?.range.start, resolved?.range.end)).toBe("INT. B - DAY\n\nB.\n\n");
+  });
+
+  test("a section resolves to its whole block", () => {
+    const script = parse(NESTED, {});
+    const resolved = resolveOutlineRef(script, { kind: "section", index: 0, label: "Act I" });
+    expect(NESTED.slice(resolved?.range.start, resolved?.range.end)).toBe(
+      "# Act I\n\nINT. A - DAY\n\nA.\n\n## Chase\n\nEXT. B - DAY\n\nB.\n\n",
+    );
+    expect(resolved?.section?.section).toBeDefined();
+  });
+
+  test("refuses when the item at that position has a different label", () => {
+    const script = parse(ACTS.replace("INT. B - DAY", "INT. RENAMED - DAY"), {});
+    expect(resolveOutlineRef(script, { kind: "scene", index: 1, label: "INT. B - DAY" })).toBeNull();
+    expect(resolveOutlineRef(script, { kind: "section", index: 5, label: "Act I" })).toBeNull();
+  });
+});
+

@@ -20,7 +20,7 @@ import {
   computeAddSceneNumberEdits,
   computeMoveSceneEdits,
   computeRemoveSceneNumberEdits,
-  isNoOpSceneMove,
+  isNoOpMove,
 } from "../fountain";
 import { parseFountain } from "../fountain/parse_safe";
 import type { FountainSettings } from "../settings";
@@ -377,12 +377,13 @@ export class FountainView extends TextFileView {
   }
 
   /**
-   * Move the scene at `range` so it starts at `pos`, both offsets in this
-   * file's current document. Both edits go through a single
-   * `applyEditsToFile` call so they share one base text and one write.
+   * Move a scene, or a section with everything under it, from `range` so
+   * it starts at `pos`, both offsets in this file's current document. Both
+   * edits go through a single `applyEditsToFile` call so they share one
+   * base text and one write.
    */
-  moveScene(range: Range, pos: number): void {
-    if (isNoOpSceneMove(range, pos)) return;
+  moveBlock(range: Range, pos: number): void {
+    if (isNoOpMove(range, pos)) return;
     this.applyEditsToFile(computeMoveSceneEdits(this.cachedScript, range, pos));
   }
 

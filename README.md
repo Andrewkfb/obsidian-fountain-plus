@@ -112,14 +112,15 @@ The top of the sidebar shows the script's title (from the title page, else the f
 
 Both choices are remembered with the workspace layout.
 
-### Reordering scenes
+### Reordering scenes and sections
 
 - **Drag a scene** onto another scene: drop on its upper half to place it before, lower half to place it after. A line shows where it will land.
 - **Drag a scene onto a section heading** to move it to the start of that section, including an empty one.
-- **••• on a scene → Move up / Move down** steps it past its neighbour, crossing into the previous or next section at a boundary. This works with touch and keyboard.
+- **Drag a section heading** onto another section heading: upper half places it before that section, lower half after it. A section moves with everything under it — its scenes and any deeper subsections (`##` under `#`).
+- **••• → Move up / Move down** on a scene steps it past its neighbour, crossing into the previous or next section at a boundary. On a section it swaps with the neighbouring section at the same level. This works with touch and keyboard.
 - **Drag a scene into Snippets** to copy it as a new snippet; the scene stays in the script.
 
-Moves edit the script text directly and work in both the editor and the reading view. A scene's text moves unchanged; the plugin only adds blank lines where a scene heading needs one to stay a scene.
+Moves edit the script text directly and work in both the editor and the reading view. Text moves unchanged; the plugin only adds blank lines where a scene heading needs one to stay a scene. Each move is worked out from the script as it is at that moment, so it stays correct even if you were typing and the outline hasn't redrawn yet; if the item you dragged no longer matches, nothing moves and the outline refreshes.
 
 ## Using Margin Marks
 

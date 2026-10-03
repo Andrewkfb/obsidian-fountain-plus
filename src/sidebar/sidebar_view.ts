@@ -1,6 +1,7 @@
 import {
   ItemView,
   Menu,
+  Notice,
   TFile,
   type ViewStateResult,
   type WorkspaceLeaf,
@@ -9,14 +10,18 @@ import {
 import { findFountainViewsForPath } from "../edit_pipeline";
 import {
   type FountainScript,
+  type OutlineRef,
   type Range,
   type Snippet,
   type StructureSection,
   type Synopsis,
   dataRange,
   extractNotes,
+  resolveOutlineRef,
   sceneMoveTargets,
   sectionDropPosition,
+  sectionMoveTargets,
+  sectionTitle,
 } from "../fountain";
 import { titlePageFieldsOf } from "../fountain/title_page";
 import { FountainView } from "../views/fountain_view";
@@ -32,16 +37,95 @@ interface SidebarCallbacks {
   /** Read text from any fountain file (open or not) at the given range. */
   readFromFile: (path: string, range: Range) => Promise<string | null>;
   insertAfterSnippetsHeader: (text: string) => void;
-  /** Move the scene at `range` in the active script so it starts at `pos`. */
-  moveScene: (range: Range, pos: number) => void;
+  /** The active script as it is now, which may be newer than the script
+   *  the outline was last drawn from. */
+  currentScript: () => FountainScript | null;
+  /** Move a scene or section block in the active script so it starts at `pos`. */
+  moveBlock: (range: Range, pos: number) => void;
+  /** Redraw the outline from the current script. */
+  refresh: () => void;
   /** Path of the script the outline is showing, if any. */
   scriptPath: () => string | null;
+  /** Tell the view a drag started or ended in the outline. */
+  setDragging: (dragging: boolean) => void;
 }
 
-/** Drag payload type for reordering scenes within the outline. Scene rows
- *  also set `application/json` with the same {path, range}, which is what
- *  the Snippets section accepts, so a scene can be dragged into snippets. */
+/** Drag payload types for reordering within the outline; both carry
+ *  {path, ref}. Scene rows also set `application/json` with {path, range},
+ *  which is what the Snippets section accepts, so a scene can be dragged
+ *  into snippets. Separate types let a heading tell, during dragover,
+ *  whether a scene or a section is coming. */
 const SCENE_DRAG_TYPE = "application/x-fountain-scene";
+const SECTION_DRAG_TYPE = "application/x-fountain-section";
+type DragType = typeof SCENE_DRAG_TYPE | typeof SECTION_DRAG_TYPE;
+
+/** How a drop target handles one drag type: `side` picks the indicator
+ *  class from the pointer, `position` maps that class to an offset in the
+ *  current script (null if the target no longer exists). */
+type DropHandler = {
+  side: (evt: DragEvent) => string;
+  position: (side: string, script: FountainScript) => number | null;
+  /** Element that shows the indicator, when it isn't the target itself. */
+  indicator?: (side: string) => HTMLElement;
+};
+
+/** The last outline `<section>` belonging to the block that starts with
+ *  `heading`'s section: following sections nested deeper than it. */
+function lastSectionOfBlock(heading: HTMLElement): HTMLElement {
+  const first = heading.parentElement as HTMLElement;
+  const depth = (el: Element) =>
+    Number(/toc-depth-(\d)/.exec(el.className)?.[1] ?? 1);
+  let last = first;
+  let next = first.nextElementSibling;
+  while (next?.tagName === "SECTION" && depth(next) > depth(first)) {
+    last = next as HTMLElement;
+    next = next.nextElementSibling;
+  }
+  return last;
+}
+
+function beforeOrAfter(el: HTMLElement, evt: DragEvent): string {
+  const rect = el.getBoundingClientRect();
+  return evt.clientY < rect.top + rect.height / 2 ? "drop-before" : "drop-after";
+}
+
+type MoveTargets = { up: number | null; down: number | null };
+
+/** Add a ••• button to `row` whose menu offers Move up / Move down. The
+ *  targets come from the current script when the menu opens. */
+function addMoveMenu(
+  row: HTMLElement,
+  label: string,
+  targets: () => MoveTargets,
+  move: (direction: keyof MoveTargets) => void,
+): void {
+  const more = row.createEl("button", {
+    cls: "toc-more",
+    text: "•••",
+    attr: { "aria-label": label },
+  });
+  more.type = "button";
+  more.addEventListener("click", (evt: MouseEvent) => {
+    evt.stopPropagation();
+    const { up, down } = targets();
+    const menu = new Menu();
+    menu.addItem((item) =>
+      item
+        .setTitle("Move up")
+        .setIcon("arrow-up")
+        .setDisabled(up === null)
+        .onClick(() => move("up")),
+    );
+    menu.addItem((item) =>
+      item
+        .setTitle("Move down")
+        .setIcon("arrow-down")
+        .setDisabled(down === null)
+        .onClick(() => move("down")),
+    );
+    menu.showAtMouseEvent(evt);
+  });
+}
 
 function clearDropIndicators(root: HTMLElement): void {
   for (const el of root.querySelectorAll(".drop-before, .drop-after, .drop-into")) {
@@ -289,8 +373,9 @@ class TocSection extends SidebarSection {
       return;
     }
 
+    const counters = { scene: 0, section: 0 };
     for (const section of sections) {
-      this.renderTocSection(div, script, section);
+      this.renderTocSection(div, script, section, counters);
     }
   }
 
@@ -317,6 +402,7 @@ class TocSection extends SidebarSection {
     parent: HTMLElement,
     script: FountainScript,
     section: StructureSection,
+    counters: { scene: number; section: number },
   ) {
     const depth = section.section?.depth ?? 1;
     parent.createEl("section", { cls: `toc-depth-${depth}` }, (s) => {
@@ -331,10 +417,11 @@ class TocSection extends SidebarSection {
           d.addEventListener("click", () => {
             this.callbacks.scrollToRange(sect.range);
           });
-          // Dropping a scene on a heading moves it to the section's start.
-          this.installDropTarget(parent, row, () => "drop-into", () =>
-            sectionDropPosition(section),
-          );
+          this.installSectionReordering(parent, row, {
+            kind: "section",
+            index: counters.section++,
+            label: sectionTitle(script, section),
+          });
         });
       }
       this.renderSynopsis(s, script, section.synopsis);
@@ -349,7 +436,11 @@ class TocSection extends SidebarSection {
           d.addEventListener("click", () => {
             this.callbacks.scrollToRange(el_scene.range);
           });
-          this.installSceneReordering(parent, row, script, el.range);
+          this.installSceneReordering(parent, row, el.range, {
+            kind: "scene",
+            index: counters.scene++,
+            label: el_scene.heading,
+          });
         }
         if (el.synopsis) {
           this.renderSynopsis(row, script, el.synopsis);
@@ -381,100 +472,179 @@ class TocSection extends SidebarSection {
   private installSceneReordering(
     outline: HTMLElement,
     row: HTMLElement,
-    script: FountainScript,
     range: Range,
+    ref: OutlineRef,
   ) {
-    row.draggable = true;
-    row.addEventListener("dragstart", (evt: DragEvent) => {
+    this.installDragSource(outline, row, SCENE_DRAG_TYPE, ref, range);
+    this.installDropTarget(outline, row, {
+      [SCENE_DRAG_TYPE]: {
+        side: (evt) => beforeOrAfter(row, evt),
+        position: (side, script) => {
+          const target = resolveOutlineRef(script, ref)?.range;
+          if (!target) return null;
+          return side === "drop-before" ? target.start : target.end;
+        },
+      },
+    });
+    this.installMoveMenu(row, "Move scene", ref, (script, start) =>
+      sceneMoveTargets(script, start),
+    );
+  }
+
+  /** A section heading drags its whole block (scenes and subsections).
+   *  It accepts sections before or after its own block, and scenes, which
+   *  go to the start of the section. */
+  private installSectionReordering(
+    outline: HTMLElement,
+    row: HTMLElement,
+    ref: OutlineRef,
+  ) {
+    this.installDragSource(outline, row, SECTION_DRAG_TYPE, ref);
+    this.installDropTarget(outline, row, {
+      [SCENE_DRAG_TYPE]: {
+        side: () => "drop-into",
+        position: (_side, script) => {
+          const target = resolveOutlineRef(script, ref)?.section;
+          return target ? sectionDropPosition(target) : null;
+        },
+      },
+      [SECTION_DRAG_TYPE]: {
+        side: (evt) => beforeOrAfter(row, evt),
+        position: (side, script) => {
+          const block = resolveOutlineRef(script, ref)?.range;
+          if (!block) return null;
+          return side === "drop-before" ? block.start : block.end;
+        },
+        // "After" lands below the whole block, so draw the line there.
+        indicator: (side) =>
+          side === "drop-after" ? lastSectionOfBlock(row) : row,
+      },
+    });
+    this.installMoveMenu(row, "Move section", ref, (script, start) =>
+      sectionMoveTargets(script, start),
+    );
+  }
+
+  private installMoveMenu(
+    row: HTMLElement,
+    label: string,
+    ref: OutlineRef,
+    targets: (script: FountainScript, start: number) => MoveTargets,
+  ) {
+    const current = (script: FountainScript | null): MoveTargets => {
+      const start = script && resolveOutlineRef(script, ref)?.range.start;
+      return script && start != null
+        ? targets(script, start)
+        : { up: null, down: null };
+    };
+    addMoveMenu(
+      row,
+      label,
+      () => current(this.callbacks.currentScript()),
+      (direction) =>
+        this.moveRef(ref, (script) => current(script)[direction]),
+    );
+  }
+
+  /** Move the block `ref` names to `position`, both resolved against the
+   *  script as it is now. If either no longer resolves, nothing moves and
+   *  the outline is redrawn so it matches the script again. */
+  private moveRef(
+    ref: OutlineRef,
+    position: (script: FountainScript) => number | null,
+  ) {
+    const script = this.callbacks.currentScript();
+    if (!script) return;
+    const block = resolveOutlineRef(script, ref);
+    const pos = block ? position(script) : null;
+    if (!block || pos === null) {
+      new Notice(
+        "The outline was out of date, so nothing moved. It has been refreshed; please try again.",
+      );
+      this.callbacks.refresh();
+      return;
+    }
+    this.callbacks.moveBlock(block.range, pos);
+  }
+
+  /** `snippetRange`, when given, is also offered as `application/json` so
+   *  the Snippets section can copy the scene. */
+  private installDragSource(
+    outline: HTMLElement,
+    el: HTMLElement,
+    type: DragType,
+    ref: OutlineRef,
+    snippetRange?: Range,
+  ) {
+    el.draggable = true;
+    el.addEventListener("dragstart", (evt: DragEvent) => {
       const path = this.callbacks.scriptPath();
       if (!evt.dataTransfer || !path) return;
-      const payload = JSON.stringify({ path, range });
-      evt.dataTransfer.setData(SCENE_DRAG_TYPE, payload);
-      evt.dataTransfer.setData("application/json", payload);
-      evt.dataTransfer.effectAllowed = "copyMove";
-      setTimeout(() => row.addClass("dragging"), 0);
-    });
-    row.addEventListener("dragend", () => {
-      row.removeClass("dragging");
-      clearDropIndicators(outline);
-    });
-    this.installDropTarget(
-      outline,
-      row,
-      (evt) => {
-        const rect = row.getBoundingClientRect();
-        return evt.clientY < rect.top + rect.height / 2
-          ? "drop-before"
-          : "drop-after";
-      },
-      (side) => (side === "drop-before" ? range.start : range.end),
-    );
-
-    const more = row.createEl("button", {
-      cls: "toc-more",
-      text: "•••",
-      attr: { "aria-label": "Move scene" },
-    });
-    more.type = "button";
-    more.addEventListener("click", (evt: MouseEvent) => {
       evt.stopPropagation();
-      const { up, down } = sceneMoveTargets(script, range.start);
-      const menu = new Menu();
-      menu.addItem((item) =>
-        item
-          .setTitle("Move up")
-          .setIcon("arrow-up")
-          .setDisabled(up === null)
-          .onClick(() => up !== null && this.callbacks.moveScene(range, up)),
-      );
-      menu.addItem((item) =>
-        item
-          .setTitle("Move down")
-          .setIcon("arrow-down")
-          .setDisabled(down === null)
-          .onClick(
-            () => down !== null && this.callbacks.moveScene(range, down),
-          ),
-      );
-      menu.showAtMouseEvent(evt);
+      evt.dataTransfer.setData(type, JSON.stringify({ path, ref }));
+      if (snippetRange) {
+        evt.dataTransfer.setData(
+          "application/json",
+          JSON.stringify({ path, range: snippetRange }),
+        );
+      }
+      evt.dataTransfer.effectAllowed = snippetRange ? "copyMove" : "move";
+      this.callbacks.setDragging(true);
+      setTimeout(() => el.addClass("dragging"), 0);
+    });
+    el.addEventListener("dragend", () => {
+      el.removeClass("dragging");
+      clearDropIndicators(outline);
+      this.callbacks.setDragging(false);
     });
   }
 
-  /** Accept scene drags on `target`. `side` picks the indicator class from
-   *  the pointer position; `position` maps that class to the insertion
-   *  offset passed to `moveScene`. Drags from another file are ignored. */
+  /** Accept the drag types in `handlers` on `target`. A block dropped
+   *  inside itself is ignored by `moveBlock`; drags from another file are
+   *  ignored here. */
   private installDropTarget(
     outline: HTMLElement,
     target: HTMLElement,
-    side: (evt: DragEvent) => string,
-    position: (side: string) => number,
+    handlers: Partial<Record<DragType, DropHandler>>,
   ) {
+    const accepted = (evt: DragEvent): DragType | undefined =>
+      (Object.keys(handlers) as DragType[]).find((t) =>
+        evt.dataTransfer?.types.includes(t),
+      );
+    // The side chosen by the latest dragover; null over the dragged row
+    // itself or after the pointer leaves.
+    let chosen: string | null = null;
     target.addEventListener("dragover", (evt: DragEvent) => {
-      if (!evt.dataTransfer?.types.includes(SCENE_DRAG_TYPE)) return;
+      const type = accepted(evt);
+      const handler = type && handlers[type];
+      if (!handler || !evt.dataTransfer) return;
       evt.preventDefault();
       evt.stopPropagation();
       evt.dataTransfer.dropEffect = "move";
       clearDropIndicators(outline);
-      if (!target.hasClass("dragging")) target.addClass(side(evt));
+      chosen = target.hasClass("dragging") ? null : handler.side(evt);
+      if (chosen) (handler.indicator?.(chosen) ?? target).addClass(chosen);
     });
     target.addEventListener("dragleave", (evt: DragEvent) => {
       const related = evt.relatedTarget as Node | null;
       if (related && target.contains(related)) return;
-      target.removeClasses(["drop-before", "drop-after", "drop-into"]);
+      chosen = null;
+      clearDropIndicators(outline);
     });
     target.addEventListener("drop", (evt: DragEvent) => {
-      const raw = evt.dataTransfer?.getData(SCENE_DRAG_TYPE);
-      if (!raw) return;
+      const type = accepted(evt);
+      const handler = type && handlers[type];
+      const raw = type && evt.dataTransfer?.getData(type);
+      if (!handler || !raw) return;
       evt.preventDefault();
       evt.stopPropagation();
-      const chosen = ["drop-before", "drop-after", "drop-into"].find((c) =>
-        target.hasClass(c),
-      );
       clearDropIndicators(outline);
       if (!chosen) return;
-      const { path, range } = JSON.parse(raw) as { path: string; range: Range };
+      const side = chosen;
+      chosen = null;
+      const { path, ref } = JSON.parse(raw) as { path: string; ref: OutlineRef };
       if (path !== this.callbacks.scriptPath()) return;
-      this.callbacks.moveScene(range, position(chosen));
+      this.moveRef(ref, (script) => handler.position(side, script));
     });
   }
 }
@@ -487,6 +657,10 @@ export class FountainSideBarView extends ItemView {
   private updateToc: () => void;
   private sections: SidebarSection[];
   private options: TocOptions = { showTodos: true, showSynopsis: false };
+  /** Redrawing removes the row being dragged, which silently cancels the
+   *  drag, so renders requested mid-drag wait until it ends. */
+  private dragging = false;
+  private renderPending = false;
 
   constructor(leaf: WorkspaceLeaf) {
     super(leaf);
@@ -499,14 +673,20 @@ export class FountainSideBarView extends ItemView {
         this.readFromFile(path, range),
       insertAfterSnippetsHeader: (text: string) =>
         this.insertAfterSnippetsHeader(text),
-      moveScene: (range: Range, pos: number) => {
+      moveBlock: (range: Range, pos: number) => {
         // The edit pipeline updates the view's script synchronously, so
         // the outline can redraw straight away instead of waiting for the
         // debounced refresh after the file write.
-        this.theFountainView()?.moveScene(range, pos);
+        this.theFountainView()?.moveBlock(range, pos);
         this.render();
       },
+      currentScript: () => this.theFountainView()?.getScript() ?? null,
+      refresh: () => this.render(),
       scriptPath: () => this.theFountainView()?.file?.path ?? null,
+      setDragging: (dragging: boolean) => {
+        this.dragging = dragging;
+        if (!dragging && this.renderPending) this.render();
+      },
     };
 
     this.sections = [
@@ -641,6 +821,11 @@ export class FountainSideBarView extends ItemView {
   }
 
   private render() {
+    if (this.dragging) {
+      this.renderPending = true;
+      return;
+    }
+    this.renderPending = false;
     const ft = this.theFountainView();
     const container = this.contentEl;
     container.empty();
