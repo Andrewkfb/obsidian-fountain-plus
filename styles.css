@@ -207,6 +207,48 @@
 	cursor: pointer;
 }
 
+/* Scene rows can be dragged to reorder; the ••• button offers Move up /
+   Move down for touch and keyboard. */
+.screenplay-toc .toc-scene {
+	position: relative;
+	padding-right: 30px;
+	cursor: grab;
+}
+
+.screenplay-toc .toc-scene.dragging {
+	opacity: 0.45;
+}
+
+.screenplay-toc .toc-scene.drop-before {
+	box-shadow: inset 0 2px 0 var(--interactive-accent);
+}
+
+.screenplay-toc .toc-scene.drop-after {
+	box-shadow: inset 0 -2px 0 var(--interactive-accent);
+}
+
+.screenplay-toc .toc-section-heading.drop-into {
+	background: var(--background-modifier-hover);
+	box-shadow: inset 0 -2px 0 var(--interactive-accent);
+}
+
+.screenplay-toc .toc-more {
+	position: absolute;
+	top: 3px;
+	right: 2px;
+	padding: 2px 6px;
+	font-size: 11px;
+	color: var(--text-muted);
+	background: transparent;
+	box-shadow: none;
+	opacity: 0;
+}
+
+.screenplay-toc .toc-scene:hover .toc-more,
+.screenplay-toc .toc-more:focus-visible {
+	opacity: 1;
+}
+
 /* Section-level synopsis sits under the heading, outside any scene row. */
 .screenplay-toc > section > .synopsis {
 	margin-bottom: 8px;
@@ -660,429 +702,6 @@
 	outline-offset: 0 !important;
 }
 
-/****************************** index view */
-
-.screenplay-index-cards {
-	display: grid;
-	grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-	gap: 10px;
-	--font-text: var(--screenplay-font);
-}
-
-.screenplay-index-card {
-	border: 1px solid var(--background-modifier-border);
-	padding: 10px;
-	height: 160px;
-	background-color: var(--background-primary-alt);
-	border-radius: var(--radius-m);
-	overflow: hidden;
-	position: relative;
-	display: flex;
-	flex-direction: column;
-}
-
-/* Fade the bottom edge into the card background to signal truncation
-   when content overflows. Invisible on under-filled cards because the
-   gradient ends in the same color as the background it sits on. */
-.screenplay-index-card:not(.dashed)::after {
-	content: "";
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: 0;
-	height: 24px;
-	background: linear-gradient(
-		transparent,
-		var(--background-primary-alt)
-	);
-	pointer-events: none;
-}
-
-.screenplay-index-card.dashed {
-	border: 1px dashed var(--background-modifier-border);
-}
-
-.screenplay-index-card { cursor: pointer; }
-
-.screenplay-index-card .pencil-button {
-	position: absolute;
-	top: 4px;
-	right: 4px;
-	width: 32px;
-	height: 32px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--text-faint);
-	border-radius: 3px;
-	cursor: pointer;
-	opacity: 0.35;
-	transition: opacity 0.15s ease, color 0.15s ease,
-		background-color 0.15s ease;
-}
-
-.screenplay-index-card:hover .pencil-button {
-	opacity: 1;
-}
-
-.screenplay-index-card .pencil-button:hover {
-	color: var(--text-normal);
-	background-color: var(--background-modifier-hover);
-}
-
-.screenplay-index-card .pencil-button .svg-icon {
-	width: 14px;
-	height: 14px;
-}
-
-.card-slot {
-	position: relative;
-}
-
-.insertion-gutter {
-	position: absolute;
-	inset-block: 0;
-	width: 14px;
-	left: -12px;
-	z-index: 2;
-	display: flex;
-	flex-direction: column;
-	align-items: center;
-	justify-content: center;
-	gap: 6px;
-	cursor: pointer;
-	opacity: 0;
-	transition: opacity 0.15s ease;
-}
-
-/* Right-edge variant — anchors to the right side of a card slot. Used on
-   the last *direct* scene of a section so a new heading slides in
-   between the section's scenes and the next sibling section (or end-
-   of-doc). */
-.insertion-gutter-right {
-	left: auto;
-	right: -12px;
-}
-
-/* Thin vertical accent bar — same visual as drop-left/drop-right. */
-.insertion-gutter::before {
-	content: "";
-	position: absolute;
-	inset-block: 12px;
-	width: 3px;
-	left: 50%;
-	transform: translateX(-50%);
-	background: var(--interactive-accent);
-	border-radius: 2px;
-}
-
-/* Stacked buttons inside the gutter — `+` (scene) on top, `#` (section)
-   below. Each is a circular accent badge that reads as a click target. */
-.insertion-gutter .gutter-btn {
-	position: relative;
-	z-index: 1;
-	width: 20px;
-	height: 20px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	border-radius: 50%;
-	box-sizing: border-box;
-	font-family:
-		var(--screenplay-font), "Courier Final Draft", "Courier",
-		var(--font-monospace);
-	font-size: 12px;
-	font-weight: var(--bold-weight);
-	line-height: 1;
-	cursor: pointer;
-}
-
-.insertion-gutter .gutter-btn:hover {
-	background: var(--interactive-accent-hover);
-}
-
-.insertion-gutter .gutter-btn .svg-icon {
-	width: 14px;
-	height: 14px;
-	color: var(--text-on-accent);
-}
-
-.insertion-gutter:hover {
-	opacity: 1;
-}
-
-.screenplay-index-cards.dragging-active .insertion-gutter,
-.screenplay-index-cards.dragging-active .insertion-gutter .gutter-btn {
-	pointer-events: none;
-	opacity: 0;
-	transition: none;
-}
-
-/* Hover-revealed horizontal `+ section` bar. Used at the top of the doc
-   (when the doc starts with a section, or is empty) and inside the
-   tail-of-doc hover zone. NOT shown between sibling sections — the
-   vertical `#` gutter on the previous section's last scene covers that. */
-.section-insert-bar {
-	height: 18px;
-	margin: 6px 0 0;
-	position: relative;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	gap: 4px;
-	opacity: 0;
-	transition: opacity 0.15s ease;
-}
-
-.section-insert-bar:hover {
-	opacity: 1;
-}
-
-.section-insert-bar::before {
-	content: "";
-	position: absolute;
-	left: 0;
-	right: 0;
-	top: 50%;
-	transform: translateY(-50%);
-	height: 3px;
-	background: var(--interactive-accent);
-	border-radius: 2px;
-	z-index: 0;
-}
-
-.section-insert-bar > .section-insert-btn {
-	position: relative;
-	z-index: 1;
-	background: var(--interactive-accent);
-	color: var(--text-on-accent);
-	padding: 2px 8px;
-	border-radius: 10px;
-	font-family:
-		var(--screenplay-font), "Courier Final Draft", "Courier",
-		var(--font-monospace);
-	font-size: 10px;
-	font-weight: var(--bold-weight);
-	line-height: 1.2;
-	cursor: pointer;
-	min-width: 26px;
-	text-align: center;
-}
-
-.section-insert-bar > .section-insert-btn:hover {
-	background: var(--interactive-accent-hover);
-}
-
-/* Hover zone at the bottom of the cards area. Gives the `+ section` bar
-   a generous hover target so the user doesn't have to chase 18px. */
-.section-tail-zone {
-	height: 36px;
-	margin-top: 12px;
-	display: flex;
-	align-items: center;
-}
-
-.section-tail-zone > .section-insert-bar {
-	flex: 1 1 auto;
-	margin: 0;
-}
-
-.section-tail-zone:hover > .section-insert-bar {
-	opacity: 1;
-}
-
-.section-tail-zone:has(> .section-insert-bar:hover) > .section-insert-bar {
-	opacity: 1;
-}
-
-
-.screenplay-index-card .drag-handle {
-	position: absolute;
-	top: 8px;
-	left: 6px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	width: 18px;
-	height: 18px;
-	color: var(--text-faint);
-	cursor: grab;
-	border-radius: 3px;
-	transition: color 0.15s ease, background-color 0.15s ease;
-}
-
-.screenplay-index-card .drag-handle:hover {
-	color: var(--text-normal);
-	background-color: var(--background-modifier-hover);
-}
-
-.screenplay-index-card .drag-handle:active {
-	cursor: grabbing;
-}
-
-.screenplay-index-card .drag-handle .svg-icon {
-	width: 14px;
-	height: 14px;
-}
-
-.screenplay-index-card.dragging {
-	opacity: 0.4;
-}
-
-.screenplay-index-card.flip-animate {
-	transition: transform 200ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-	.screenplay-index-card.flip-animate {
-		transition: none;
-	}
-}
-
-.screenplay-index-cards .drop-right {
-	box-shadow: inset -3px 0 0 0 var(--interactive-accent);
-}
-
-.screenplay-index-cards .drop-left {
-	box-shadow: inset 3px 0 0 0 var(--interactive-accent);
-}
-
-.screenplay-index-card .scene-heading {
-	font-size: 14px;
-	text-transform: uppercase;
-	font-family:
-		var(--screenplay-font), "Courier Final Draft", "Courier",
-		var(--font-monospace);
-	margin-top: 0;
-	margin-left: 18px;
-	margin-right: 36px;
-	margin-bottom: 8px;
-	/* padding: 8px; */
-}
-
-/* The inline rename input replaces the heading <h3> in place. Match the
-   heading's visual exactly, then strip browser/Obsidian input chrome.
-   The only edit-mode cue is the form-field background tint — no
-   border, no shadow, no rounded corners. */
-.screenplay-index-card input.scene-heading {
-	display: block;
-	font-weight: var(--bold-weight);
-	color: var(--h1-color);
-	border: none !important;
-	outline: none !important;
-	padding: 0 !important;
-	border-radius: 0 !important;
-	box-shadow: none !important;
-	background: var(--background-modifier-form-field);
-	width: auto;
-	box-sizing: border-box;
-	height: auto;
-	line-height: 1.1;
-}
-
-.screenplay-index-card input.scene-heading:focus {
-	border: none !important;
-	outline: none !important;
-	box-shadow: none !important;
-}
-
-.screenplay-index-card .synopsis {
-	font-size: 11px;
-	/* padding: 8px; */
-}
-
-.screenplay-index-card .preview {
-	color: var(--text-faint);
-	font-family:
-		var(--screenplay-font), "Courier Final Draft", "Courier",
-		var(--font-monospace);
-	font-size: 11px;
-}
-
-.screenplay-index-card .note-todo {
-	font-size: 11px;
-	margin: 5px;
-	background-image: linear-gradient(
-		transparent 70%,
-		rgba(var(--color-yellow-rgb), 0.4) 70%
-	);
-}
-
-/* Section heading row: the <h{depth}> sits next to a hover-revealed
-   pencil. Flex+baseline keeps the pencil aligned with the heading
-   text regardless of the h-tag's depth. */
-.section-heading-row {
-	display: flex;
-	align-items: baseline;
-	gap: 4px;
-}
-
-.section-heading-row > .section {
-	flex: 0 1 auto;
-	min-width: 0;
-}
-
-.section-heading-row > .pencil-button {
-	flex: 0 0 auto;
-	width: 24px;
-	height: 24px;
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	color: var(--text-faint);
-	border-radius: 3px;
-	cursor: pointer;
-	opacity: 0.35;
-	transition: opacity 0.15s ease, color 0.15s ease,
-		background-color 0.15s ease;
-}
-
-.section-heading-row:hover > .pencil-button {
-	opacity: 1;
-}
-
-/* Hide the pencil while the rename input is in place — otherwise the
-   input's `flex: 1 1 auto` shoves it sideways, which reads as a jump. */
-.section-heading-row:has(> input.section) > .pencil-button {
-	display: none;
-}
-
-.section-heading-row > .pencil-button:hover {
-	color: var(--text-normal);
-	background-color: var(--background-modifier-hover);
-}
-
-.section-heading-row > .pencil-button .svg-icon {
-	width: 14px;
-	height: 14px;
-}
-
-/* Inline rename input replaces the <h{depth}>. Computed font metrics
-   are copied onto the input inline (see editSectionHeadingHandler) so
-   it visually matches whichever heading depth it replaces. */
-.section-heading-row > input.section {
-	/* Override the heading's `flex: 0 1 auto` — the input needs room
-	   to type into, beyond just the original title's width. */
-	flex: 1 1 auto;
-	min-width: 0;
-	border: none !important;
-	outline: none !important;
-	padding: 0 !important;
-	border-radius: 0 !important;
-	box-shadow: none !important;
-	background: var(--background-modifier-form-field);
-	box-sizing: border-box;
-	height: auto;
-}
-
-.section-heading-row > input.section:focus {
-	border: none !important;
-	outline: none !important;
-	box-shadow: none !important;
-}
-
 /* PDF Options Dialog */
 .pdf-warning {
 	background-color: var(--background-modifier-error);
@@ -1262,41 +881,12 @@
 	color: var(--text-on-accent) !important;
 }
 
-/* ==========================================================================
-   Touch / coarse-pointer support
-
-   Several index-card affordances are revealed by hovering: the `+` / `#`
-   insertion gutters and the `+ section` bars sit at `opacity: 0` until a
-   pointer is over them. A touch device never produces that hover, so on
-   a tablet or phone those controls are not merely awkward — they are
-   invisible and unreachable, which silently removes scene and section
-   insertion from the cards view.
-
-   `hover: none` matches exactly the devices with that problem, so the
-   desktop experience is untouched. The `.dragging-active` rules that
-   hide the gutters mid-drag carry higher specificity and still win.
-   ========================================================================== */
+/* The outline's ••• move button is revealed on hover; a touch device
+   never hovers, so show it there at all times. */
 @media (hover: none) {
-	.insertion-gutter,
-	.section-insert-bar,
-	.section-tail-zone > .section-insert-bar {
+	.screenplay-toc .toc-more {
 		opacity: 1;
 	}
-
-	/* Already faintly visible at rest, but there is no hover to bring it
-	   to full strength, so a tap target should not look disabled. */
-	.screenplay-index-card .pencil-button,
-	.screenplay-index-card .drag-handle {
-		opacity: 1;
-		color: var(--text-normal);
-	}
-}
-
-/* The grip owns the drag gesture on touch (see `installTouchDragHandlers`).
-   Without this the browser claims the pointer stream for scrolling as soon
-   as the finger moves, and the drag never gets a `pointermove`. */
-.screenplay-index-card .drag-handle {
-	touch-action: none;
 }
 
 /* Script statistics modal. A right-aligned value column and a plain

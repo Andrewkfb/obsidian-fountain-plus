@@ -4,7 +4,6 @@ import {
   type FountainScript,
   type SceneHeading,
   applyEdits,
-  computeMoveSceneAcrossFilesEdits,
   computeMoveSceneEdits,
 } from "../src/fountain";
 import { parse } from "../src/fountain/parser";
@@ -92,31 +91,6 @@ describe("computeMoveSceneEdits", () => {
     expect(sceneHeadings(reparsed)).toEqual([
       "INT. CAR - DAY",
       "INT. HOUSE - DAY",
-      "EXT. PARK - NIGHT",
-    ]);
-  });
-});
-
-describe("computeMoveSceneAcrossFilesEdits", () => {
-  test("removes from src and inserts at dst position", () => {
-    const src = parse(THREE_SCENES, {});
-    const dst = parse("EXT. BEACH - DAY\n\nSurf.\n\n", {});
-    const second = sceneRange(src, 1);
-    const { srcEdits, dstEdits } = computeMoveSceneAcrossFilesEdits(
-      src,
-      second,
-      dst,
-      dst.document.length,
-    );
-    const newSrc = parse(applyEdits(src.document, srcEdits), {});
-    const newDst = parse(applyEdits(dst.document, dstEdits), {});
-
-    expect(sceneHeadings(newSrc)).toEqual([
-      "INT. HOUSE - DAY",
-      "INT. CAR - DAY",
-    ]);
-    expect(sceneHeadings(newDst)).toEqual([
-      "EXT. BEACH - DAY",
       "EXT. PARK - NIGHT",
     ]);
   });

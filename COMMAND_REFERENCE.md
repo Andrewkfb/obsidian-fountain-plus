@@ -19,8 +19,7 @@ These commands ship with a default binding but can be remapped from Obsidian's h
 
 | Default | Command | Available when |
 |---------|---------|----------------|
-| Cmd/Ctrl+Shift+I | Toggle index card view | A fountain view is active |
-| Cmd/Ctrl+Shift+L | Select current scene | The fountain editor (not cards / readonly) is active |
+| Cmd/Ctrl+Shift+L | Select current scene | The fountain editor (not readonly) is active |
 
 ## Commands (via Command Palette)
 
@@ -104,18 +103,11 @@ Removes all scene numbers from all scenes in the document.
 - **Availability**: Only when a fountain file is active
 - **Description**: Strips all scene numbers from scene headings.
 
-### Toggle index card view
-Switches between the index card view and the editor (or readonly script), preserving position across the round-trip.
-- **Command ID**: `toggle-index-cards-view`
-- **Default Hotkey**: Cmd/Ctrl+Shift+I (rebindable)
-- **Availability**: Only when a fountain view is active
-- **Description**: From the editor, scrolls the card for the scene-under-cursor into view. From the cards, opens the editor at the start-of-scene-content of the topmost visible card. The remembered "where you came from" lets ⌘⇧I serve as a fluent round-trip without losing your place.
-
 ### Select current scene
 Selects the entire current scene in the editor.
 - **Command ID**: `select-current-scene`
 - **Default Hotkey**: Cmd/Ctrl+Shift+L (rebindable)
-- **Availability**: Only when a fountain editor is active (not the readonly or index card view)
+- **Availability**: Only when a fountain editor is active (not the readonly view)
 - **Description**: Sets the editor selection to the whole `scene.range` — heading line through the line before the next scene/section heading. Designed as a primitive that composes with the system clipboard: `⌘X` to delete a scene, `⌘C` then `↓` then `⌘V` to duplicate, or cut-and-paste to move scenes across files.
 
 ## Content Filtering

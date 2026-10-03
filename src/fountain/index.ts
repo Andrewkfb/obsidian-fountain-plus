@@ -58,14 +58,15 @@ export {
   type Edit,
   applyEdits,
   computeMoveSceneEdits,
-  computeMoveSceneAcrossFilesEdits,
   computeAddSceneNumberEdits,
   computeRemoveSceneNumberEdits,
 } from "./edits";
 
 export {
   findSceneAtOffset,
-  startOfSceneContent,
+  isNoOpSceneMove,
+  sceneMoveTargets,
+  sectionDropPosition,
 } from "./structure_nav";
 
 export { removeElementsFromText } from "./removal";

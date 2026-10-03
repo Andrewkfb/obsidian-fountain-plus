@@ -18,11 +18,9 @@ import {
   type ShowHideSettings,
   collapseRangeToStart,
   computeAddSceneNumberEdits,
-  computeMoveSceneAcrossFilesEdits,
   computeMoveSceneEdits,
   computeRemoveSceneNumberEdits,
-  findSceneAtOffset,
-  startOfSceneContent,
+  isNoOpSceneMove,
 } from "../fountain";
 import { parseFountain } from "../fountain/parse_safe";
 import type { FountainSettings } from "../settings";
@@ -36,29 +34,11 @@ import {
   type FountainViewPersistedState,
   type ReadonlyViewCallbacks,
   type ReadonlyViewPersistedState,
-  ShowMode,
   type ViewState,
   getSnippetsStartPosition,
 } from "./view_state";
 
 export const VIEW_TYPE_FOUNTAIN = "fountain";
-
-/** How many leading newlines must precede an inserted line at `pos` so
- *  it starts at column 0 with a blank-line separator from any preceding
- *  paragraph content. Used by both scene and section insertion: scene
- *  headings *require* a blank line before when following Action (the
- *  Scene rule's `BlankLineOrEndOfInput` is the after-blank, but without
- *  a preceding blank line `INT. FOO - DAY` is absorbed as Action text);
- *  sections don't strictly require it (Action's terminator matches
- *  `&StructuralMarkerStart`), but padding is harmless and lets both
- *  insertion paths share the same helper. */
-function newlinesNeededBefore(doc: string, pos: number): string {
-  if (pos === 0) return "";
-  const before = doc.slice(Math.max(0, pos - 2), pos);
-  if (before.endsWith("\n\n")) return "";
-  if (before.endsWith("\n")) return "\n";
-  return "\n\n";
-}
 
 /** Obsidian TextFileView for .fountain files, managing mode switching and document operations. */
 export class FountainView extends TextFileView {
@@ -76,9 +56,7 @@ export class FountainView extends TextFileView {
   constructor(leaf: WorkspaceLeaf, getSettings: () => FountainSettings) {
     super(leaf);
     this.spellCheckEnabled = getSettings().spellCheckByDefault;
-    this.readonlyViewState = {
-      mode: ShowMode.Script,
-    };
+    this.readonlyViewState = {};
     // Initialize with empty document
     this.cachedScript = parseFountain("");
     this.state = this.createReadonlyState(this.readonlyViewState, "");
@@ -133,83 +111,9 @@ export class FountainView extends TextFileView {
       startReadingModeHere: (r) => this.state.scrollToHere(r),
       requestSave: () => this.requestSave(),
       replaceText: (r, s) => this.replaceText(r, s),
-      navigateToSceneContent: (r) => this.navigateToSceneContent(r),
-      insertSceneAt: (pos) => this.insertSceneAt(pos),
-      insertSectionAt: (pos) => this.insertSectionAt(pos),
-      moveSceneAcross: (args) => this.moveSceneAcross(args),
       getText: (r) => this.getText(r),
       openLink: (target, event) => this.openLink(target, event),
     };
-  }
-
-  private navigateToSceneContent(sceneRange: Range): void {
-    const scene = findSceneAtOffset(this.cachedScript, sceneRange.start);
-    if (!scene) return;
-    const pos = startOfSceneContent(this.cachedScript, scene);
-    this.startEditModeHere({ start: pos, end: pos });
-  }
-
-  /** Insert a new `.SCENE HEADING` placeholder at `pos`, then auto-focus
-   *  the rename input on the freshly created card so the user can type
-   *  immediately. Used by the gutter and the dashed `+` card. The
-   *  `newlinesNeededBefore` padding is load-bearing: a scene heading
-   *  inserted right after Action text (no blank line between) is
-   *  absorbed as Action and never parses as a heading. */
-  private insertSceneAt(pos: number): void {
-    const doc = this.cachedScript.document;
-    const prefix = newlinesNeededBefore(doc, pos);
-    const expectedStart = pos + prefix.length;
-    if (this.state instanceof ReadonlyViewState) {
-      this.state.schedulePostRender(() =>
-        this.focusNewCardHeading(expectedStart),
-      );
-    }
-    this.applyEditsToFile([
-      {
-        range: { start: pos, end: pos },
-        replacement: `${prefix}.SCENE HEADING\n\n`,
-      },
-    ]);
-  }
-
-  private focusNewCardHeading(pos: number): void {
-    const card = this.contentEl.querySelector<HTMLElement>(
-      `.screenplay-index-card[data-range^="${pos},"]`,
-    );
-    if (!card) return;
-    const pencil = card.querySelector<HTMLElement>(".pencil-button");
-    pencil?.click();
-  }
-
-  /** Insert a fresh `# New section` heading at `pos`, then auto-focus the
-   *  rename input. The newline padding isn't strictly needed for sections
-   *  (Action terminates on `&StructuralMarkerStart`), but we run through
-   *  the same helper as `insertSceneAt` for symmetry. */
-  private insertSectionAt(pos: number): void {
-    const doc = this.cachedScript.document;
-    const prefix = newlinesNeededBefore(doc, pos);
-    const expectedStart = pos + prefix.length;
-    if (this.state instanceof ReadonlyViewState) {
-      this.state.schedulePostRender(() =>
-        this.focusNewSectionHeading(expectedStart),
-      );
-    }
-    this.applyEditsToFile([
-      {
-        range: { start: pos, end: pos },
-        replacement: `${prefix}# New section\n\n`,
-      },
-    ]);
-  }
-
-  private focusNewSectionHeading(start: number): void {
-    const sectionEl = this.contentEl.querySelector<HTMLElement>(
-      `.section-heading-row .section[data-start="${start}"]`,
-    );
-    if (!sectionEl) return;
-    const row = sectionEl.closest(".section-heading-row");
-    const pencil = row?.querySelector<HTMLElement>(".pencil-button");
-    pencil?.click();
   }
 
   /** Navigate to a `[[>target]]` link using Obsidian's standard link resolution. */
@@ -308,58 +212,43 @@ export class FountainView extends TextFileView {
       };
       const menu = new Menu();
       const state = this.state.pstate;
-      if (!this.blackoutCharacter()) {
-        menu.addItem((item) =>
-          item
-            .setTitle(state.mode === ShowMode.Script ? "Index cards" : "Script")
-            .onClick(() => {
-              if (this.state instanceof ReadonlyViewState) {
-                this.state.toggleIndexCards();
-                this.app.workspace.requestSaveLayout();
-              }
-            }),
-        );
-        menu.addSeparator();
-      }
-      if (state.mode !== ShowMode.IndexCards) {
-        menu.addItem((item) =>
-          item
-            .setTitle("Synopsis")
-            .setChecked(!(state.hideSynopsis || false))
-            .onClick(() =>
-              updateSettings({ hideSynopsis: !(state.hideSynopsis || false) }),
-            ),
-        );
-        menu.addItem((item) =>
-          item
-            .setTitle("Notes")
-            .setChecked(!(state.hideNotes || false))
-            .onClick(() =>
-              updateSettings({ hideNotes: !(state.hideNotes || false) }),
-            ),
-        );
-        menu.addItem((item) =>
-          item
-            .setTitle("Boneyard")
-            .setChecked(!(state.hideBoneyard || false))
-            .onClick(() =>
-              updateSettings({ hideBoneyard: !(state.hideBoneyard || false) }),
-            ),
-        );
-        menu.addSeparator();
-        if (this.blackoutCharacter()) {
-          menu.addItem((item) => {
-            item.setTitle("Stop rehearsal").onClick(() => {
-              this.stopRehearsalMode();
-            });
+      menu.addItem((item) =>
+        item
+          .setTitle("Synopsis")
+          .setChecked(!(state.hideSynopsis || false))
+          .onClick(() =>
+            updateSettings({ hideSynopsis: !(state.hideSynopsis || false) }),
+          ),
+      );
+      menu.addItem((item) =>
+        item
+          .setTitle("Notes")
+          .setChecked(!(state.hideNotes || false))
+          .onClick(() =>
+            updateSettings({ hideNotes: !(state.hideNotes || false) }),
+          ),
+      );
+      menu.addItem((item) =>
+        item
+          .setTitle("Boneyard")
+          .setChecked(!(state.hideBoneyard || false))
+          .onClick(() =>
+            updateSettings({ hideBoneyard: !(state.hideBoneyard || false) }),
+          ),
+      );
+      menu.addSeparator();
+      if (this.blackoutCharacter()) {
+        menu.addItem((item) => {
+          item.setTitle("Stop rehearsal").onClick(() => {
+            this.stopRehearsalMode();
           });
-        } else {
-          menu.addItem((item) =>
-            item
-              .setTitle("Rehearsal")
-              .onClick(() => this.rehearsalModeClicked()),
-          );
-        }
+        });
+      } else {
+        menu.addItem((item) =>
+          item
+            .setTitle("Rehearsal")
+            .onClick(() => this.rehearsalModeClicked()),
+        );
       }
       menu.showAtMouseEvent(evt);
     }
@@ -488,38 +377,13 @@ export class FountainView extends TextFileView {
   }
 
   /**
-   * Move a scene from one file to another. When src and dst are the same
-   * file the two edits are sent through a single `applyEditsToFile` call
-   * so they share one consistent base text and one `vault.modify` write —
-   * issuing them as separate writes raced and tripped Obsidian's
-   * "modified externally" detection. Cross-file moves go through each
-   * file's path-keyed pipeline independently.
+   * Move the scene at `range` so it starts at `pos`, both offsets in this
+   * file's current document. Both edits go through a single
+   * `applyEditsToFile` call so they share one base text and one write.
    */
-  moveSceneAcross(args: {
-    srcPath: string;
-    srcRange: Range;
-    dstPath: string;
-    dstPos: number;
-  }): void {
-    const { srcPath, srcRange, dstPath, dstPos } = args;
-    const srcView = findFountainViewsForPath(this.app, srcPath)[0];
-    if (!srcView) return;
-    if (srcPath === dstPath) {
-      srcView.applyEditsToFile(
-        computeMoveSceneEdits(srcView.getScript(), srcRange, dstPos),
-      );
-      return;
-    }
-    const dstView = findFountainViewsForPath(this.app, dstPath)[0];
-    if (!dstView) return;
-    const { srcEdits, dstEdits } = computeMoveSceneAcrossFilesEdits(
-      srcView.getScript(),
-      srcRange,
-      dstView.getScript(),
-      dstPos,
-    );
-    srcView.applyEditsToFile(srcEdits);
-    dstView.applyEditsToFile(dstEdits);
+  moveScene(range: Range, pos: number): void {
+    if (isNoOpSceneMove(range, pos)) return;
+    this.applyEditsToFile(computeMoveSceneEdits(this.cachedScript, range, pos));
   }
 
   getText(range: Range): string {
@@ -566,88 +430,6 @@ export class FountainView extends TextFileView {
     }
     this.toggleEditAction.empty();
     setIcon(this.toggleEditAction, this.isEditMode() ? "book-open" : "edit");
-  }
-
-  /** ⌘⇧I — toggle the active fountain view between IndexCards and the
-   *  prior non-cards mode (edit or readonly Script). Position is preserved
-   *  across the trip per design/improved_index_card_view.md §1. */
-  toggleIndexCardsView(): void {
-    if (
-      this.state instanceof ReadonlyViewState &&
-      this.state.pstate.mode === ShowMode.IndexCards
-    ) {
-      // Cards → non-cards.
-      const target = this.state.firstVisibleCardRange();
-      const scene = target
-        ? findSceneAtOffset(this.cachedScript, target.start)
-        : null;
-      const wasEditing = this.readonlyViewState.editing ?? false;
-      // Drop cards mode in the persisted state so the readonly side
-      // remembers Script (next ⌘E from edit mode should land in Script).
-      this.state.pstate = { ...this.state.pstate, mode: ShowMode.Script };
-
-      if (wasEditing) {
-        this.switchToEditMode();
-        if (scene) {
-          const pos = startOfSceneContent(this.cachedScript, scene);
-          this.scrollToHere({ start: pos, end: pos });
-        }
-      } else {
-        this.state.render();
-        if (scene?.scene) {
-          this.state.scrollToHere(scene.scene.range);
-        }
-      }
-      this.app.workspace.requestSaveLayout();
-      return;
-    }
-
-    // Non-cards → cards.
-    let offset = 0;
-    if (this.state instanceof EditorViewState) {
-      offset = this.state.cursorOffset();
-    } else {
-      const firstLine = this.state.rangeOfFirstVisibleLine();
-      offset = firstLine?.start ?? 0;
-    }
-    const scene = findSceneAtOffset(this.cachedScript, offset);
-    const cameFromEdit = this.state.isEditMode;
-
-    this.readonlyViewState = {
-      ...this.readonlyViewState,
-      editing: cameFromEdit,
-      mode: ShowMode.IndexCards,
-    };
-
-    if (cameFromEdit) {
-      // Inline editor → readonly switch. Going via `toggleEditMode()`
-      // would auto-scroll to the editor's first-visible line, which
-      // (in IndexCards mode) flips back to Script via
-      // `ReadonlyViewState.scrollToHere`. We pick our own scroll target
-      // (the scene-under-cursor card), so we skip that path.
-      this.showViewMenuAction.show();
-      this.state.destroy();
-      this.state = this.createReadonlyState(
-        this.readonlyViewState,
-        this.file?.path ?? "",
-      );
-      this.state.render();
-      this.toggleEditAction.empty();
-      setIcon(this.toggleEditAction, "edit");
-    } else if (this.state instanceof ReadonlyViewState) {
-      this.state.setPersistentState(this.readonlyViewState);
-    }
-
-    if (scene?.scene) {
-      const start = scene.scene.range.start;
-      requestAnimationFrame(() => {
-        const cardEl = this.contentEl.querySelector(
-          `.screenplay-index-card[data-range^="${start},"]`,
-        );
-        cardEl?.scrollIntoView();
-      });
-    }
-    this.app.workspace.requestSaveLayout();
   }
 
   onLoadFile(file: TFile): Promise<void> {

@@ -291,14 +291,6 @@ export default class FountainPlugin extends Plugin {
       }),
     });
     this.addCommand({
-      id: "toggle-index-cards-view",
-      name: "Toggle index card view",
-      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "i" }],
-      checkCallback: ifFountainView(this.app, (fv) => {
-        fv.toggleIndexCardsView();
-      }),
-    });
-    this.addCommand({
       id: "select-current-scene",
       name: "Select current scene",
       hotkeys: [{ modifiers: ["Mod", "Shift"], key: "l" }],

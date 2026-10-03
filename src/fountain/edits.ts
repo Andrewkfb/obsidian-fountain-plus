@@ -30,6 +30,19 @@ function trailingNewlinesNeeded(text: string): string {
   return lastTwo === "\n\n" ? "" : lastTwo[1] === "\n" ? "\n" : "\n\n";
 }
 
+/** How many leading newlines must precede text inserted at `pos` so it
+ *  starts at column 0 after a blank line. Scene headings *require* the
+ *  blank line when following Action (without it `INT. FOO - DAY` is
+ *  absorbed as Action text), which matters when a moved scene lands right
+ *  after a section heading. */
+function newlinesNeededBefore(doc: string, pos: number): string {
+  if (pos === 0) return "";
+  const before = doc.slice(Math.max(0, pos - 2), pos);
+  if (before.endsWith("\n\n")) return "";
+  if (before.endsWith("\n")) return "\n";
+  return "\n\n";
+}
+
 /**
  * Edits to move the scene-sized `range` so its content starts at `newPos`.
  * `newPos` must not lie inside `range`.
@@ -44,34 +57,12 @@ export function computeMoveSceneEdits(
     { range: { start: range.start, end: range.end }, replacement: "" },
     {
       range: { start: newPos, end: newPos },
-      replacement: sceneText + trailingNewlinesNeeded(sceneText),
+      replacement:
+        newlinesNeededBefore(script.document, newPos) +
+        sceneText +
+        trailingNewlinesNeeded(sceneText),
     },
   ];
-}
-
-/**
- * Edits for moving a scene from `src` at `srcRange` into `dst` at `dstPos`.
- * The returned edits are applied against `src.document` and `dst.document`
- * respectively.
- */
-export function computeMoveSceneAcrossFilesEdits(
-  src: FountainScript,
-  srcRange: Range,
-  _dst: FountainScript,
-  dstPos: number,
-): { srcEdits: Edit[]; dstEdits: Edit[] } {
-  const sceneText = src.document.slice(srcRange.start, srcRange.end);
-  return {
-    srcEdits: [
-      { range: { start: srcRange.start, end: srcRange.end }, replacement: "" },
-    ],
-    dstEdits: [
-      {
-        range: { start: dstPos, end: dstPos },
-        replacement: sceneText + trailingNewlinesNeeded(sceneText),
-      },
-    ],
-  };
 }
 
 function scenesOf(script: FountainScript): SceneHeading[] {

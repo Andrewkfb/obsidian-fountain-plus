@@ -5,11 +5,6 @@ import type {
   ShowHideSettings,
 } from "../fountain";
 
-export enum ShowMode {
-  Script = "script",
-  IndexCards = "index-cards",
-}
-
 export type ReadonlyViewCallbacks = {
   getScript: () => FountainScript;
   reRender: () => void;
@@ -17,23 +12,6 @@ export type ReadonlyViewCallbacks = {
   startEditModeHere: (range: Range) => void;
   startReadingModeHere: (range: Range) => void;
   replaceText: (range: Range, replacement: string) => void;
-  /** Switch to edit mode and place the cursor at the start of the scene
-   *  containing `sceneRange.start`. */
-  navigateToSceneContent: (sceneRange: Range) => void;
-  /** Insert a fresh scene heading at `pos` and auto-focus its rename input. */
-  insertSceneAt: (pos: number) => void;
-  /** Insert a fresh `# section` heading at `pos` and auto-focus its rename input. */
-  insertSectionAt: (pos: number) => void;
-  /** Move a scene from `srcPath` (at `srcRange`) to `dstPath` (inserted at
-   *  `dstPos`). When `srcPath === dstPath` both edits go through a single
-   *  batch; otherwise the source delete and destination insert are routed
-   *  to each file's path-keyed pipeline. */
-  moveSceneAcross: (args: {
-    srcPath: string;
-    srcRange: Range;
-    dstPath: string;
-    dstPos: number;
-  }) => void;
   getText: (range: Range) => string;
   /** Open a `[[>target]]` link target. `event` carries Mod/Shift modifiers. */
   openLink: (target: string, event: MouseEvent) => void;
@@ -43,17 +21,13 @@ export type Rehearsal = {
   character: string;
 };
 
+/** Layouts saved before the index card view was removed may still carry
+ *  a `mode` field; it is ignored. */
 export type ReadonlyViewPersistedState = {
-  mode: ShowMode;
   rehearsal?: Rehearsal; // This misses which dialogue(s) have been revealed, but is cheap and good enough
 } & ShowHideSettings;
 
-/**
- * Stored in persistent state (workspace.json under the fountain key).
- * `editing` is kept separate from `mode` on purpose: toggling edit mode
- * off must return to whichever readonly view (Script or IndexCards) was
- * last active, so we have to remember it across the toggle.
- */
+/** Stored in persistent state (workspace.json under the fountain key). */
 export type FountainViewPersistedState = ReadonlyViewPersistedState & {
   editing?: boolean; // undefined => false
 };

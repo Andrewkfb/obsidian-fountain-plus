@@ -2,7 +2,7 @@
 
 A fork of [bgrundmann/obsidian-fountain](https://github.com/bgrundmann/obsidian-fountain) with Final Draft import/export, script statistics, title-page editing, touch support and a parser roughly twice as fast.
 
-A plugin for writing screenplays in [Fountain format](https://fountain.io) inside Obsidian. Live formatting as you type, an editable index-card view, an outline-style sidebar, PDF export, rehearsal mode, snippets — basically the bits I kept wishing for whenever I tried to use Obsidian for actual scripts.
+A plugin for writing screenplays in [Fountain format](https://fountain.io) inside Obsidian. Live formatting as you type, an outline sidebar you can reorder scenes from, PDF export, rehearsal mode, snippets — basically the bits I kept wishing for whenever I tried to use Obsidian for actual scripts.
 
 ![reading view](demo/hero.jpg)
 
@@ -11,8 +11,7 @@ A plugin for writing screenplays in [Fountain format](https://fountain.io) insid
 - **Live screenplay formatting** as you type — follow Fountain syntax, the editor handles the formatting.
 - **Near-print readonly view** with optional hiding of notes, synopsis, and boneyard.
 - **PDF export** with configurable paper size, scene heading style, and synopsis/notes inclusion.
-- **Index card view** — click a card to jump back to the editor at that scene; rename scene and section headings inline; insert scenes or sections at any position via hover gutters; change section depth or delete a section heading from the same rename input; drag-reorder across files; ⌘⇧I round-trips between cards and editor.
-- **Outline-style sidebar** that doubles as a planning tree — sections, synopses, and per-scene todos, all click-to-jump.
+- **Outline sidebar** that doubles as a planning tree — sections, synopses, and per-scene todos, all click-to-jump. Drag scenes to reorder them.
 - **Rehearsal mode** that blacks out a character's dialogue, so you can actually rehearse from the script.
 
 ## Quick overview
@@ -25,10 +24,6 @@ Toggle between the editor and a near-print readonly view:
 
 ![toggle to readonly view](demo/toggle.gif)
 
-Reorder scenes by dragging index cards, then renumber them with two quick commands:
-
-![index cards and scene number commands](demo/index.gif)
-
 Rehearsal mode blacks out a character's dialogue:
 
 ![rehearsal mode](demo/rehearsal.gif)
@@ -37,7 +32,7 @@ Rehearsal mode blacks out a character's dialogue:
 
 - **Final Draft interop** — export any script to `.fdx`, or import one a collaborator sent you; export never overwrites an existing `.fdx`
 - **script statistics** — page count (paginated exactly as the PDF export does, not estimated), scene and section counts, and per-character speech/line/word totals
-- **works on touch** — index cards reorder by dragging the grip on a tablet, and the hover-revealed insertion controls stay visible on devices with no pointer
+- **works on touch** — on a tablet, reorder scenes from the outline's ••• menu (drag-and-drop needs a mouse)
 - **settings** — PDF export defaults and the spell-check default are remembered rather than re-picked every time
 - **title pages** — an *Edit title page* command fills in Title / Credit / Author / Source / Draft date / Contact through a dialog, creating the title page if the script doesn't have one yet and removing it when you clear every field; custom keys you've added by hand are left alone
 - **scene numbers** (`#1#`, `#1A#`, `#I-1-A#`, etc.) displayed in bold on left and right margins, with commands to automatically add or remove scene numbers
@@ -54,7 +49,6 @@ Rehearsal mode blacks out a character's dialogue:
 - toggle spell check command (off by default to avoid distraction during creative writing)
 - search and replace in editor (Cmd/Ctrl+F)
 - toggle edit mode with Cmd/Ctrl+E (when a fountain file has focus)
-- toggle index-card view with Cmd/Ctrl+Shift+I; the cursor and scroll position are preserved across the round-trip
 - select the current scene as text with Cmd/Ctrl+Shift+L — composes with the system clipboard for delete (`⌘X`) and duplicate (`⌘C`, `↓`, `⌘V`), or to cut a scene out and paste it into another file
 
 ## Command reference
@@ -85,44 +79,15 @@ If you have Custom File Extensions plugin installed and configured to open `.fou
 
 This plugin handles `.fountain` files natively and doesn't require Custom File Extensions to work properly.
 
-## Using the Index Card View
+## Cut / copy / duplicate scenes
 
-The index card view is the structural read on your script — a map you can rearrange. It is not a second editor; anything that changes scene *contents* (synopsis text, dialogue, action) lives in the editor.
-
-### Toggle (⌘⇧I)
-
-Press `Cmd/Ctrl+Shift+I` to flip between the editor (or readonly script) and the index card view. The toggle remembers where you came from:
-
-- From the editor → the card for the scene under the cursor scrolls into view.
-- From the cards → the editor opens at the **start of scene content** of the topmost visible card. That's the first character after the heading's blank line — your synopsis if one exists, otherwise the first action / dialogue line.
-
-A round-trip with no edits leaves you (approximately) where you started.
-
-### Click model
-
-- **Click anywhere on a card** — jump back to the editor at that scene.
-- **Pencil icon (top-right)** — rename the heading inline. `Enter` saves, `Esc` cancels, click outside also saves.
-- **Pencil next to a section heading** — same gesture, but the input shows the full `## Title` form so you can change depth or, by clearing the input, delete the section heading entirely.
-- **Grip handle (top-left)** — drag to reorder. Same drag works across open files.
-- **Todo lines** on the card jump to the todo's exact location, not the scene heading.
-
-### Inserting scenes and sections
-
-Hover the left edge of any card (or the right edge of the last scene in a section) to reveal a thin gutter with two stacked buttons: `+` inserts a new `.SCENE HEADING` placeholder, `#` inserts a new `# section`. The new card or heading auto-focuses its rename input so you can start typing immediately. Empty sections show a dashed `+` card as the persistent aim point.
-
-A horizontal `+ section` bar shows above the first section (when the doc starts with one) and at the bottom of the doc, so you can prepend or append a section without finding a specific card to anchor to.
-
-### Cut / copy / duplicate scenes
-
-There is no per-card menu. Use **Select current scene** (`Cmd/Ctrl+Shift+L`) in the editor to set the selection to the whole scene, then compose with the system clipboard:
+Use **Select current scene** (`Cmd/Ctrl+Shift+L`) in the editor to set the selection to the whole scene, then compose with the system clipboard:
 
 - `⌘⇧L`, `⌘X` — delete a scene.
 - `⌘⇧L`, `⌘C`, `↓`, `⌘V` — duplicate a scene.
 - `⌘⇧L`, `⌘X`, switch file, `⌘V` — move a scene across files.
 
-### Drag a card into Snippets
-
-Drag any card onto the snippets section in the sidebar to copy that scene as a new snippet. The original scene stays in the script (snippets are a library, not a destination). Cross-file drags are supported — the dragged scene lands in the *destination* script's `# Snippets` section.
+To reorder scenes within a script, use the outline sidebar (below).
 
 ## Using the Table of Contents
 
@@ -146,6 +111,15 @@ The top of the sidebar shows the script's title (from the title page, else the f
 - **Show/Hide todos**: show per-scene todos. On by default.
 
 Both choices are remembered with the workspace layout.
+
+### Reordering scenes
+
+- **Drag a scene** onto another scene: drop on its upper half to place it before, lower half to place it after. A line shows where it will land.
+- **Drag a scene onto a section heading** to move it to the start of that section, including an empty one.
+- **••• on a scene → Move up / Move down** steps it past its neighbour, crossing into the previous or next section at a boundary. This works with touch and keyboard.
+- **Drag a scene into Snippets** to copy it as a new snippet; the scene stays in the script.
+
+Moves edit the script text directly and work in both the editor and the reading view. A scene's text moves unchanged; the plugin only adds blank lines where a scene heading needs one to stay a scene.
 
 ## Using Margin Marks
 

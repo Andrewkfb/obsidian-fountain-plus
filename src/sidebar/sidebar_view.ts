@@ -1,5 +1,6 @@
 import {
   ItemView,
+  Menu,
   TFile,
   type ViewStateResult,
   type WorkspaceLeaf,
@@ -14,6 +15,8 @@ import {
   type Synopsis,
   dataRange,
   extractNotes,
+  sceneMoveTargets,
+  sectionDropPosition,
 } from "../fountain";
 import { titlePageFieldsOf } from "../fountain/title_page";
 import { FountainView } from "../views/fountain_view";
@@ -29,6 +32,21 @@ interface SidebarCallbacks {
   /** Read text from any fountain file (open or not) at the given range. */
   readFromFile: (path: string, range: Range) => Promise<string | null>;
   insertAfterSnippetsHeader: (text: string) => void;
+  /** Move the scene at `range` in the active script so it starts at `pos`. */
+  moveScene: (range: Range, pos: number) => void;
+  /** Path of the script the outline is showing, if any. */
+  scriptPath: () => string | null;
+}
+
+/** Drag payload type for reordering scenes within the outline. Scene rows
+ *  also set `application/json` with the same {path, range}, which is what
+ *  the Snippets section accepts, so a scene can be dragged into snippets. */
+const SCENE_DRAG_TYPE = "application/x-fountain-scene";
+
+function clearDropIndicators(root: HTMLElement): void {
+  for (const el of root.querySelectorAll(".drop-before, .drop-after, .drop-into")) {
+    el.removeClasses(["drop-before", "drop-after", "drop-into"]);
+  }
 }
 
 abstract class SidebarSection {
@@ -313,6 +331,10 @@ class TocSection extends SidebarSection {
           d.addEventListener("click", () => {
             this.callbacks.scrollToRange(sect.range);
           });
+          // Dropping a scene on a heading moves it to the section's start.
+          this.installDropTarget(parent, row, () => "drop-into", () =>
+            sectionDropPosition(section),
+          );
         });
       }
       this.renderSynopsis(s, script, section.synopsis);
@@ -327,6 +349,7 @@ class TocSection extends SidebarSection {
           d.addEventListener("click", () => {
             this.callbacks.scrollToRange(el_scene.range);
           });
+          this.installSceneReordering(parent, row, script, el.range);
         }
         if (el.synopsis) {
           this.renderSynopsis(row, script, el.synopsis);
@@ -351,6 +374,109 @@ class TocSection extends SidebarSection {
       }
     });
   }
+
+  /** Make a scene row draggable, accept scene drops above or below it, and
+   *  give it a ••• menu with Move up / Move down for touch and keyboard
+   *  (HTML5 drag-and-drop doesn't fire from touch on iPad). */
+  private installSceneReordering(
+    outline: HTMLElement,
+    row: HTMLElement,
+    script: FountainScript,
+    range: Range,
+  ) {
+    row.draggable = true;
+    row.addEventListener("dragstart", (evt: DragEvent) => {
+      const path = this.callbacks.scriptPath();
+      if (!evt.dataTransfer || !path) return;
+      const payload = JSON.stringify({ path, range });
+      evt.dataTransfer.setData(SCENE_DRAG_TYPE, payload);
+      evt.dataTransfer.setData("application/json", payload);
+      evt.dataTransfer.effectAllowed = "copyMove";
+      setTimeout(() => row.addClass("dragging"), 0);
+    });
+    row.addEventListener("dragend", () => {
+      row.removeClass("dragging");
+      clearDropIndicators(outline);
+    });
+    this.installDropTarget(
+      outline,
+      row,
+      (evt) => {
+        const rect = row.getBoundingClientRect();
+        return evt.clientY < rect.top + rect.height / 2
+          ? "drop-before"
+          : "drop-after";
+      },
+      (side) => (side === "drop-before" ? range.start : range.end),
+    );
+
+    const more = row.createEl("button", {
+      cls: "toc-more",
+      text: "•••",
+      attr: { "aria-label": "Move scene" },
+    });
+    more.type = "button";
+    more.addEventListener("click", (evt: MouseEvent) => {
+      evt.stopPropagation();
+      const { up, down } = sceneMoveTargets(script, range.start);
+      const menu = new Menu();
+      menu.addItem((item) =>
+        item
+          .setTitle("Move up")
+          .setIcon("arrow-up")
+          .setDisabled(up === null)
+          .onClick(() => up !== null && this.callbacks.moveScene(range, up)),
+      );
+      menu.addItem((item) =>
+        item
+          .setTitle("Move down")
+          .setIcon("arrow-down")
+          .setDisabled(down === null)
+          .onClick(
+            () => down !== null && this.callbacks.moveScene(range, down),
+          ),
+      );
+      menu.showAtMouseEvent(evt);
+    });
+  }
+
+  /** Accept scene drags on `target`. `side` picks the indicator class from
+   *  the pointer position; `position` maps that class to the insertion
+   *  offset passed to `moveScene`. Drags from another file are ignored. */
+  private installDropTarget(
+    outline: HTMLElement,
+    target: HTMLElement,
+    side: (evt: DragEvent) => string,
+    position: (side: string) => number,
+  ) {
+    target.addEventListener("dragover", (evt: DragEvent) => {
+      if (!evt.dataTransfer?.types.includes(SCENE_DRAG_TYPE)) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      evt.dataTransfer.dropEffect = "move";
+      clearDropIndicators(outline);
+      if (!target.hasClass("dragging")) target.addClass(side(evt));
+    });
+    target.addEventListener("dragleave", (evt: DragEvent) => {
+      const related = evt.relatedTarget as Node | null;
+      if (related && target.contains(related)) return;
+      target.removeClasses(["drop-before", "drop-after", "drop-into"]);
+    });
+    target.addEventListener("drop", (evt: DragEvent) => {
+      const raw = evt.dataTransfer?.getData(SCENE_DRAG_TYPE);
+      if (!raw) return;
+      evt.preventDefault();
+      evt.stopPropagation();
+      const chosen = ["drop-before", "drop-after", "drop-into"].find((c) =>
+        target.hasClass(c),
+      );
+      clearDropIndicators(outline);
+      if (!chosen) return;
+      const { path, range } = JSON.parse(raw) as { path: string; range: Range };
+      if (path !== this.callbacks.scriptPath()) return;
+      this.callbacks.moveScene(range, position(chosen));
+    });
+  }
 }
 
 // TODO: In an ideal world, instead of registering an additional view, we
@@ -373,6 +499,14 @@ export class FountainSideBarView extends ItemView {
         this.readFromFile(path, range),
       insertAfterSnippetsHeader: (text: string) =>
         this.insertAfterSnippetsHeader(text),
+      moveScene: (range: Range, pos: number) => {
+        // The edit pipeline updates the view's script synchronously, so
+        // the outline can redraw straight away instead of waiting for the
+        // debounced refresh after the file write.
+        this.theFountainView()?.moveScene(range, pos);
+        this.render();
+      },
+      scriptPath: () => this.theFountainView()?.file?.path ?? null,
     };
 
     this.sections = [

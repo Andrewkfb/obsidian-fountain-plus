@@ -6,8 +6,7 @@ command ids are `fountain-plus:…` — the e2e specs depend on that prefix.
 ## Features
 
 - **Views**: Readonly/edit modes with seamless toggling, PDF export, rehearsal mode with blackout
-- **Sidebar**: TOC with navigation, synopsis/notes toggles, snippets with drag-and-drop
-- **Index Cards**: Click card → jump to editor at start-of-scene-content; pencil renames scene/section headings inline (section rename also handles depth via leading `#`s and deletion via empty input); hover gutter on each card has stacked `+` (scene) / `#` (section) buttons, with a right-edge variant on the last scene of a section; horizontal `+ section` bars at top-of-doc and tail-of-doc; empty section / empty doc show a dashed `+` card; drag-drop reordering across files; ⌘⇧I toggles cards ↔ editor preserving position. **Section depth in the cards view is 1–3 only**; `script.structure()` treats `####+` headings as scene-internal subsections (`scene.content`), and the section rename refuses depths past 3. See `design/improved_index_card_view.md` and `design/section_editing_in_index_cards.md`.
+- **Sidebar**: outline with navigation, synopsis/todo toggles, and scene reordering — drag a row (before/after by pointer half), drop on a section heading (`sectionDropPosition`), or ••• → Move up/down (`sceneMoveTargets`, crosses section boundaries). All moves go through `FountainView.moveScene` → `computeMoveSceneEdits`, which pads newlines so a scene landing under a section heading still parses. Snippets with drag-and-drop. The index card view was removed (October 2026); `design/` docs about it are historical.
 - **Snippets**: Store in `# Snippets` section, Mod+Shift+X/C to move/copy selection, drag into script/sidebar
 - **Editor**: Scene folding (Ctrl+Shift+[ ]), character name completion, ⌘⇧L selects the current scene as text (compose with ⌘X / ⌘C for delete / duplicate)
 - **Margin Marks**: `[[@marker]]` syntax renders in margin
@@ -18,7 +17,7 @@ command ids are `fountain-plus:…` — the e2e specs depend on that prefix.
 - **Settings**: `settings.ts` — PDF export defaults and the spell-check default, persisted to `data.json`. Only *defaults*; per-view show/hide state stays in the workspace layout. The view takes a `() => FountainSettings` getter rather than importing the plugin, keeping the dependency one-way.
 - **Statistics**: `fountain/statistics.ts` (pure) + `statistics_command.ts` (modal). Page count comes from paginating via `pdf/instruction_generator.ts`, which is free of `pdf-lib` — keep it that way or the statistics command drags the PDF library back onto the load path.
 - **Final Draft**: `fountain/fdx.ts` — pure string↔string conversion both ways, `fdx_commands.ts` for the vault side. Documented lossiness: export drops sections/synopses/notes; import reads only `Key: value` lines from a Final Draft title page.
-- **Touch**: index cards reorder via pointer events (`installTouchDragHandlers`) because WebKit never fires HTML5 drag events from touch. Mice keep the native path. Hover-revealed controls get an `@media (hover: none)` override — without it they are `opacity: 0` and unreachable on a tablet.
+- **Touch**: HTML5 drag events never fire from touch in WebKit, so the outline's ••• Move up/down menu is the touch path for reordering; it is always visible under `@media (hover: none)`.
 
 ## LLM Guidelines
 

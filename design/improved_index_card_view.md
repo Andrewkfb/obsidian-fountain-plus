@@ -1,3 +1,5 @@
+> **Historical.** The index card view was removed in October 2026; scenes are now reordered from the outline sidebar. Kept for the reasoning behind it.
+
 # Index Card View — Design Rationale
 
 The index card view is the structural read on a script — a map you can

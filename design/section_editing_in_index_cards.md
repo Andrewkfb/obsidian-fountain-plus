@@ -1,3 +1,5 @@
+> **Historical.** The index card view was removed in October 2026; scenes are now reordered from the outline sidebar. Kept for the reasoning behind it.
+
 # Section Editing in Index Cards — Rationale
 
 This is the why-doc for the section affordances in the index card view

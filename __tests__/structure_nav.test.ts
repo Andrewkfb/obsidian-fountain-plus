@@ -1,5 +1,12 @@
 import { describe, expect, test } from "@jest/globals";
-import { findSceneAtOffset, startOfSceneContent } from "../src/fountain";
+import {
+  applyEdits,
+  computeMoveSceneEdits,
+  findSceneAtOffset,
+  isNoOpSceneMove,
+  sceneMoveTargets,
+  sectionDropPosition,
+} from "../src/fountain";
 import { parse } from "../src/fountain/parser";
 
 const THREE_SCENES =
@@ -52,45 +59,79 @@ describe("findSceneAtOffset", () => {
   });
 });
 
-describe("startOfSceneContent", () => {
-  test("lands on synopsis when one exists", () => {
-    const script = parse(THREE_SCENES, {});
-    const offset = script.document.indexOf("EXT. PARK - NIGHT");
-    const scene = findSceneAtOffset(script, offset);
-    if (!scene) throw new Error("expected scene");
-    const pos = startOfSceneContent(script, scene);
-    // Position should be at "= Park synopsis line." (right after the
-    // heading's blank line).
-    expect(script.document.slice(pos, pos + 1)).toBe("=");
+const ACTS =
+  "# Act I\n\nINT. A - DAY\n\nA.\n\nINT. B - DAY\n\nB.\n\n" +
+  "# Act II\n\nINT. C - DAY\n\nC.\n\n" +
+  "# Act III\n\n";
+
+/** Outline as "section: scene, scene" lines, for compact assertions. */
+function outline(doc: string): string[] {
+  return parse(doc, {})
+    .structure()
+    .sections.map(
+      (s) =>
+        `${s.section ? doc.slice(s.section.range.start, s.section.range.end).trim() : "-"}: ` +
+        s.content
+          .filter((c) => c.scene)
+          .map((c) => c.scene?.heading)
+          .join(", "),
+    );
+}
+
+function move(doc: string, heading: string, pos: (s: ReturnType<typeof parse>) => number | null): string {
+  const script = parse(doc, {});
+  const scene = findSceneAtOffset(script, doc.indexOf(heading));
+  if (!scene) throw new Error("no scene");
+  const p = pos(script);
+  if (p === null) throw new Error("no target");
+  return applyEdits(doc, computeMoveSceneEdits(script, scene.range, p));
+}
+
+describe("sceneMoveTargets", () => {
+  test("moves within a section by swapping with the neighbour", () => {
+    const doc = move(ACTS, "INT. B", (s) => sceneMoveTargets(s, ACTS.indexOf("INT. B")).up);
+    expect(outline(doc)).toEqual(["# Act I: INT. B - DAY, INT. A - DAY", "# Act II: INT. C - DAY", "# Act III: "]);
   });
 
-  test("lands on first body line when no synopsis", () => {
-    const script = parse(THREE_SCENES, {});
-    const offset = script.document.indexOf("INT. HOUSE - DAY");
-    const scene = findSceneAtOffset(script, offset);
-    if (!scene) throw new Error("expected scene");
-    const pos = startOfSceneContent(script, scene);
-    expect(script.document.slice(pos, pos + "Home".length)).toBe("Home");
+  test("moving down from the last scene enters the next section at its start", () => {
+    const doc = move(ACTS, "INT. B", (s) => sceneMoveTargets(s, ACTS.indexOf("INT. B")).down);
+    expect(outline(doc)).toEqual(["# Act I: INT. A - DAY", "# Act II: INT. B - DAY, INT. C - DAY", "# Act III: "]);
   });
 
-  test("heading-only scene at end of document lands inside scene range", () => {
-    const headingOnly = "INT. HOUSE - DAY";
-    const script = parse(headingOnly, {});
-    const offset = 0;
-    const scene = findSceneAtOffset(script, offset);
-    if (!scene) throw new Error("expected scene");
-    const pos = startOfSceneContent(script, scene);
-    expect(pos).toBeGreaterThanOrEqual(scene.range.start);
-    expect(pos).toBeLessThanOrEqual(scene.range.end);
+  test("moving up from the first scene of a section ends the previous section", () => {
+    const doc = move(ACTS, "INT. C", (s) => sceneMoveTargets(s, ACTS.indexOf("INT. C")).up);
+    expect(outline(doc)).toEqual(["# Act I: INT. A - DAY, INT. B - DAY, INT. C - DAY", "# Act II: ", "# Act III: "]);
   });
 
-  test("multi-line synopsis: lands on first synopsis line", () => {
-    const multiSynopsis =
-      "INT. HOUSE - DAY\n\n= First line.\n= Second line.\n\nAction.\n\n";
-    const script = parse(multiSynopsis, {});
-    const scene = findSceneAtOffset(script, 0);
-    if (!scene) throw new Error("expected scene");
-    const pos = startOfSceneContent(script, scene);
-    expect(script.document.slice(pos, pos + "= First".length)).toBe("= First");
+  test("moving into an empty section lands after its heading as a real scene", () => {
+    const doc = move(ACTS, "INT. C", (s) => sceneMoveTargets(s, ACTS.indexOf("INT. C")).down);
+    expect(outline(doc)).toEqual(["# Act I: INT. A - DAY, INT. B - DAY", "# Act II: ", "# Act III: INT. C - DAY"]);
+  });
+
+  test("the outline's first and last scenes have nowhere further to go", () => {
+    const script = parse(ACTS, {});
+    expect(sceneMoveTargets(script, ACTS.indexOf("INT. A")).up).toBeNull();
+    const plain = parse(THREE_SCENES, {});
+    expect(sceneMoveTargets(plain, THREE_SCENES.indexOf("INT. CAR")).down).toBeNull();
+  });
+
+  test("works without any sections", () => {
+    const doc = move(THREE_SCENES, "INT. CAR", (s) => sceneMoveTargets(s, THREE_SCENES.indexOf("INT. CAR")).up);
+    expect(outline(doc)).toEqual(["-: INT. HOUSE - DAY, INT. CAR - DAY, EXT. PARK - NIGHT"]);
+  });
+});
+
+describe("sectionDropPosition", () => {
+  test("drops in front of a section's first scene", () => {
+    const doc = move(ACTS, "INT. A", (s) => sectionDropPosition(s.structure().sections[1]));
+    expect(outline(doc)).toEqual(["# Act I: INT. B - DAY", "# Act II: INT. A - DAY, INT. C - DAY", "# Act III: "]);
+  });
+});
+
+describe("isNoOpSceneMove", () => {
+  test("positions at either edge of the scene are no-ops", () => {
+    expect(isNoOpSceneMove({ start: 10, end: 20 }, 10)).toBe(true);
+    expect(isNoOpSceneMove({ start: 10, end: 20 }, 20)).toBe(true);
+    expect(isNoOpSceneMove({ start: 10, end: 20 }, 21)).toBe(false);
   });
 });

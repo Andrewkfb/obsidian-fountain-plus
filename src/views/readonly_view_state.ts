@@ -4,22 +4,19 @@ import type {
   Range,
   ShowHideSettings,
 } from "../fountain";
-import { renderIndexCards } from "./index_cards_view";
 import { rangeOfFirstVisibleLine, renderFountain } from "./reading_view";
 import {
   type ReadonlyViewCallbacks,
   type ReadonlyViewPersistedState,
-  ShowMode,
   type ViewState,
 } from "./view_state";
 
-/** Renders the fountain script as HTML for reading, index cards, and rehearsal mode. */
+/** Renders the fountain script as HTML for reading and rehearsal mode. */
 export class ReadonlyViewState implements ViewState {
   readonly isEditMode = false;
   public pstate: ReadonlyViewPersistedState;
   private contentEl: HTMLElement;
   private path: string;
-  private pendingPostRender: (() => void) | null = null;
 
   constructor(
     contentEl: HTMLElement,
@@ -30,17 +27,6 @@ export class ReadonlyViewState implements ViewState {
     this.contentEl = contentEl;
     this.path = path;
     this.pstate = pstate;
-  }
-
-  /** Run `fn` after the next `render()` completes. Cleared on use. Used to
-   *  focus a freshly created card's heading input after the async edit
-   *  pipeline writes the new scene and re-renders the index card view. */
-  schedulePostRender(fn: () => void): void {
-    this.pendingPostRender = fn;
-  }
-
-  public get showMode(): ShowMode {
-    return this.pstate.mode;
   }
 
   private get blackout(): string | null {
@@ -85,31 +71,16 @@ export class ReadonlyViewState implements ViewState {
     // grammar rejects comes back as action lines rather than as an
     // error, so there is no failure case to handle here.
     const fp = this.callbacks.getScript();
-    const mainblock = this.contentEl.createDiv(
-      this.showMode === ShowMode.IndexCards ? undefined : "screenplay",
-    );
-    switch (this.showMode) {
-      case ShowMode.IndexCards:
-        renderIndexCards(mainblock, this.path, fp, this.callbacks);
-        break;
-
-      case ShowMode.Script: {
-        const settings: ShowHideSettings = this.blackout
-          ? { hideBoneyard: true, hideNotes: true, hideSynopsis: true }
-          : this.pstate;
-        renderFountain(mainblock, fp, settings, this.blackout ?? undefined);
-        break;
-      }
-    }
+    const mainblock = this.contentEl.createDiv("screenplay");
+    const settings: ShowHideSettings = this.blackout
+      ? { hideBoneyard: true, hideNotes: true, hideSynopsis: true }
+      : this.pstate;
+    renderFountain(mainblock, fp, settings, this.blackout ?? undefined);
 
     if (this.blackout) {
       this.installToggleBlackoutHandlers();
     }
     this.installLinkHandlers();
-
-    const fn = this.pendingPostRender;
-    this.pendingPostRender = null;
-    fn?.();
   }
 
   private installLinkHandlers() {
@@ -125,20 +96,8 @@ export class ReadonlyViewState implements ViewState {
   }
 
   scrollToHere(r: Range) {
-    const scroll = () => {
-      const targetElement = document.querySelector(
-        `[data-range^="${r.start},"]`,
-      );
-      targetElement?.scrollIntoView();
-    };
-    if (this.pstate.mode !== ShowMode.Script) {
-      this.toggleIndexCards();
-      requestAnimationFrame(() => {
-        scroll();
-      });
-    } else {
-      scroll();
-    }
+    const targetElement = document.querySelector(`[data-range^="${r.start},"]`);
+    targetElement?.scrollIntoView();
   }
 
   public setPersistentState(pstate: ReadonlyViewPersistedState) {
@@ -148,14 +107,6 @@ export class ReadonlyViewState implements ViewState {
 
   public setShowHideSettings(sh: ShowHideSettings) {
     this.pstate = { ...this.pstate, ...sh };
-    this.render();
-  }
-
-  toggleIndexCards() {
-    this.pstate.mode =
-      this.pstate.mode === ShowMode.IndexCards
-        ? ShowMode.Script
-        : ShowMode.IndexCards;
     this.render();
   }
 
@@ -192,27 +143,5 @@ export class ReadonlyViewState implements ViewState {
     const screenplay = this.contentEl.querySelector(".screenplay");
     if (screenplay === null) return null;
     return rangeOfFirstVisibleLine(screenplay as HTMLElement);
-  }
-
-  /** First index card whose top edge is at or below the content area's
-   *  top, with its `data-range` parsed back to a {start, end}. Used by
-   *  the ⌘⇧I toggle to anchor the editor's cursor when leaving cards. */
-  firstVisibleCardRange(): Range | null {
-    if (this.pstate.mode !== ShowMode.IndexCards) return null;
-    const cards = this.contentEl.querySelectorAll<HTMLElement>(
-      ".screenplay-index-card[data-range]",
-    );
-    const containerTop = this.contentEl.getBoundingClientRect().top;
-    for (const card of Array.from(cards)) {
-      if (card.getBoundingClientRect().top >= containerTop) {
-        const dr = card.getAttribute("data-range");
-        if (!dr) continue;
-        const [s, e] = dr.split(",").map((n) => Number.parseInt(n, 10));
-        if (Number.isFinite(s) && Number.isFinite(e)) {
-          return { start: s, end: e };
-        }
-      }
-    }
-    return null;
   }
 }
